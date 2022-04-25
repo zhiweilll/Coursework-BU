@@ -1,0 +1,307 @@
+---
+title: "MA678 Homework 2"
+date: "9/22/2020"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
+```
+
+## 11.5 
+Residuals and predictions: The folder Pyth contains outcome y and predictors x1, x2 for 40 data points, with a further 20 points with the predictors but no observed outcome. Save the file to your working directory, then read it into R using read.table().
+
+### (a) 
+Use R to fit a linear regression model predicting y from x1, x2, using the first 40 data points in the file. Summarize the inferences and check the fit of your model.
+
+```{r,warning = FALSE}
+library(rstanarm)
+pyth=read.table("C:/Users/dell/Documents/ROS/Pyth/pyth.txt",header = T)
+pyth_train=pyth[1:40,]
+fit_pyth=stan_glm(y~x1+x2,data=pyth_train,refresh=0)
+print(fit_pyth)
+#fit_pyth=lm(y~x1+x2,data=pyth_train)
+#summary(fit_pyth)
+```
+
+### (b) 
+Display the estimated model graphically as in Figure 10.2
+
+```{r}
+sim_pyth=as.matrix(fit_pyth)
+nsim_pyth=nrow(sim_pyth)
+display_pyth=sample(nsim_pyth,10)
+
+par=(mfrow=c(1,2))
+plot(pyth_train$x1,pyth_train$y,xlab="x1",ylab="y")
+x2_bar=mean(pyth_train$x2)
+for(i in display_pyth){
+  curve(cbind(1,x,x2_bar) %*% sim_pyth[i,1:3],lwd=0.5,col="gray",add=TRUE)
+}
+ curve(cbind(1,x,x2_bar)%*%coef(fit_pyth),col="black",add=TRUE)
+ 
+plot(pyth_train$x2,pyth_train$y,xlab="x1",ylab="y")
+x1_bar=mean(pyth_train$x1)
+for(i in display_pyth){
+  curve(cbind(1,x1_bar,x)%*%sim_pyth[i,1:3],lwd=0.5,col="gray",add=TRUE)
+}
+ curve(cbind(1,x1_bar,x)%*%coef(fit_pyth),col="black",add=TRUE)
+
+
+```
+
+### (c) 
+Make a residual plot for this model. Do the assumptions appear to be met?
+
+```{r}
+pre=predict(fit_pyth)
+resid=pyth_train$y-pre
+plot(pre,resid)  
+```
+**The assumptions appear to not be met.*
+
+### (d) 
+Make predictions for the remaining 20 data points in the file. How confident do you feel about these predictions?
+
+```{r}
+pyth_test=pyth[41:60,2:3]
+inter=coef(fit_pyth)[1]
+a=coef(fit_pyth)[2]
+b=coef(fit_pyth)[3]
+pre_y=inter+a*pyth_test$x1+b*pyth_test$x2
+cbind(pre_y,pyth_test)
+```
+**I am not sure about the prediction since the error sd of this model is 0.9.**
+
+
+
+## 12.5 
+Logarithmic transformation and regression: Consider the following regression: log(weight)=-3.8+2.1log(height)+error, with errors that have standard deviation 0.25. Weights are in pounds and heights are in inches.
+
+### (a) 
+Fill in the blanks: Approximately 68% of the people will have weights within a factor of **1.28** and **-1.28** of their predicted values from the regression.
+
+### (b) 
+Using pen and paper, sketch the regression line and scatterplot of log(weight) versus log(height) that make sense and are consistent with the fitted model. Be sure to label the axes of your graph.
+```{r}
+data=read.csv("C:/Users/dell/Documents/ROS/Earnings/data/earnings.csv")
+plot(log(data$height),log(data$weight),xlab="log(height)",ylab="log(weight)",main="fitting regression model")
+abline(a=-3.8,b=2.1)
+```
+
+
+
+## 12.6 
+Logarithmic transformations: The folder Pollution contains mortality rates and various environmental factors from 60 US metropolitan areas. For this exercise we shall model mortality rate given nitric oxides, sulfur dioxide, and hydrocarbons as inputs. this model is an extreme oversimplication, as it combines all sources of mortality and does not adjust for crucial factors such as age and smoking. We use it to illustrate log transformation in regression.  
+
+### (a) 
+create a scatterplot of mortality rate versus level of nitric oxides. Do you think linear regression will fit these data well? Fit the regression and evaluate a residual plot from the regression.
+
+```{r,warning=FALSE}
+library(ggplot2)
+pol=read.csv("C:/Users/dell/Documents/ROS/Pollution/data/pollution.csv")
+# original regression model
+fit1_pol=stan_glm(pol$mort~pol$nox,refresh=0)
+print(fit1_pol)
+ggplot(pol,aes(nox,mort))+geom_point()+geom_abline(intercept = coef(fit1_pol)[1],slope =  coef(fit1_pol)[2])
+#residual plot
+pre_pol=predict(fit1_pol)
+resid_pol=pol$mort-pre_pol
+data=data.frame(pre_pol,resid_pol)
+ggplot(data,aes(pre_pol,resid_pol))+geom_point()+geom_hline(yintercept = 0,lwd=0.8, color = "darkgray") 
+```
+*This linear regression fit these data not well*
+
+### (b) 
+Find an appropriate reansformation that will result in data more appropriate for linear regression. Fit a regression to the transformed data and evaluate the new residual plot.
+
+```{r}
+#log trans model
+fit2_pol=lm(log(pol$mort)~log(pol$nox))
+summary(fit2_pol)
+ggplot(pol,aes(log(nox),log(mort)))+geom_point()+geom_abline(intercept = coef(fit2_pol)[1],slope =  coef(fit2_pol)[2])+labs( title = "log model plot")
+
+#residual plot
+pre2_pol=predict(fit2_pol)
+resid2_pol=log(pol$mort)-pre2_pol
+data=data.frame(pre2_pol,resid2_pol)
+ggplot(data,aes(pre2_pol,resid2_pol))+geom_point()+geom_hline(yintercept = 0,lwd=0.8, color = "darkgray")+  labs( title = "residual plot")
+```
+
+### (c) 
+Interpret the slope coefficient from the model you chose in (b)
+**the intercept 6.807175:the predicted log mortality rate is 6.81 if level of nox is 1**
+**the coef 0.015893: each 1% difference in nox,the difference in mortality rate is 0.016%**
+
+### (d) 
+Now fit a model predicting mortality rate using levels of nitric oxides, sulfur dioxide, and hydrocarbons as inputs. Use appropriate transformation when helpful. Plot the fitted regression model and interpret the coefficients.
+
+```{r}
+nox=pol$nox
+so2=pol$so2
+hc=pol$hc
+mort=pol$mort
+fit3_pol=lm(log(mort)~log(nox)+log(so2)+log(hc),data=pol)
+summary(fit3_pol)
+plot(fit3_pol)
+```
+**log(nox): each 1% difference in nox,the difference in mortality rate is 0.060% **
+**log(so2): each 1% difference in so2,the difference in mortality rate is 0.014 **
+**log(hc): each 1% difference in hc,the difference in mortality rate is 0.061% **
+**the intercept:the predicted log mortality rate is 6.83 if levels of nox so2 and hc are 1**
+
+### (e) 
+Cross validate: fit the model you chose above to the first half of the data and then predict for the second half. You used all the data to construct the model in (d), so this is not really cross validation, but it gives a sense of how the steps of cross validation can be implemented.
+
+```{r}
+pol_train=pol[1:30,]
+pol_test=pol[31:60,]
+fit4_pol=lm(log(mort)~log(nox)+log(so2)+log(hc),data=pol_train)
+summary(fit4_pol)
+
+inter=coef(fit4_pol)[1]
+a=coef(fit4_pol)[2]
+b=coef(fit4_pol)[3]
+c=coef(fit4_pol)[4]
+
+pre_mort=inter+a*log(pol_train$nox)+b*log(pol_train$so2)+log(pol_train$hc)
+#cbind(mort=pol_test$mort,pre_mort)
+
+```
+
+
+
+## 12.7 
+Cross validation comparison of models with different transformations of outcomes: when we compare models with transformed continuous outcomes, we must take into account how the nonlinear transformation warps the continuous outcomes. Follow the procedure used to compare models for the mesquite bushes example on page 202.
+
+### (a) 
+Compare models for earnings and for log(earnings) given height and sex as shown in page 84 and 192. Use earnk and log(earnk) as outcomes.
+
+```{r}
+earn=read.csv("C:/Users/dell/Documents/ROS/Earnings/data/earnings.csv")
+model=stan_glm(earnk~height+male,data=earn,subset=earnk>0,refresh=0)
+logmodel=stan_glm(log(earnk)~height+male,data=earn,subset=earnk>0,refresh=0)
+print(model)
+print(logmodel)
+```
+
+### (b) 
+Compare models from other exercises in this chapter.
+```{r,warning=FALSE}
+library(loo)
+loo1=loo(model,k_threshold=0.7)
+loo2=loo(logmodel)
+loo_compare(loo1,loo2)
+```
+
+
+
+## 12.8 
+Log-log transformations: Suppose that, for a certain population of animals, we can predict log  weight from log height as follows:  
+
+* An animal that is 50 centimeters tall is predicted to weigh 10 kg.  
+
+* Every increase of 1% in height corresponds to a predicted increase of 2% in weight.  
+
+* The weights of approximately 95% of the animals fall within a factor of 1.1 of predicted  values.  
+
+### (a) 
+Give the equation of the regression line and the residual standard deviation of the regression.  
+
+** $log(weigh)=-5.52+2log(height)$ **
+** $sd = log(1.1)/2 = 0.048$ **
+
+### (b) 
+Suppose the standard deviation of log weights is 20% in this population. What, then, is the $R^{2}$ of the regression model described here?
+
+** $R^2=1-sd^2/0.2^2=0.94$ **
+
+
+
+## 12.9 
+Linear and logarithmic transformations: For a study of congressional elections, you would like  a measure of the relative amount of money raised by each of the two major-party candidates in  each district. Suppose that you know the amount of money raised by each candidate; label these  dollar values Di and Ri. You would like to combine these into a single variable that can be  included as an input variable into a model predicting vote share for the Democrats.  Discuss the advantages and disadvantages of the following measures:  
+
+### (a) 
+The simple difference, $D_{i}-R_{i}$  
+
+**The simple difference can directly reflect the difference between the amount of money raised by two parties.We can compare the simple difference with 0. But it cannot tell us how big the difference is, compared to the variable itself.**
+
+### (b) 
+The ratio, $D_{i}/R_{i}$   
+
+**The ratio can reflect the relative size of the difference compared with the variable. We can compare the ratio with 1. But it cannot show the specific value of the difference.**
+
+### (c) 
+The difference on the logarithmic scale, $log\ D_{i}-log\ R_{i}$   
+
+**The difference on the logarithmic scale equals to $log(D_{i}/R_{i})$. It has similar advantage annd disadvantage with the ratio $D_{i}/R_{i}$  but can transform it to logarithmic scale.**
+
+### (d) 
+The relative proportion, $D_{i}/(D_{i}+R_{i})$. 
+
+**The value of relative proportion falls into $(0,1)$. We can compare it with 0.5. But we cannot know the specific value of the difference.**
+
+
+## 12.11
+Elasticity: An economist runs a regression examining the relations between the average price  of cigarettes, P, and the quantity purchased, Q, across a large sample of counties in the United  States, assuming the functional form, $logQ=\alpha+\beta logP$. Suppose the estimate for $\beta$ is 0.3.  Interpret this coefficient. \
+
+**for each 1% difference in price of cigarettes, the difference in quantity purchased is 0.3%**
+
+
+## 12.13
+Building regression models: Return to the teaching evaluations data from Exercise 10.6. Fit  regression models predicting evaluations given many of the inputs in the dataset. Consider interactions, combinations of predictors, and transformations, as appropriate. Consider several  models, discuss in detail the final model that you choose, and also explain why you chose it rather than the others you had considered. 
+
+```{r,warning=FALSE}
+library(ggplot2)
+beauty=read.csv("C:/Users/dell/Documents/ROS/Beauty/data/beauty.csv")
+#1
+fit1= stan_glm(eval ~ beauty + female, data=beauty, refresh=0)
+print(fit1)
+median(bayes_R2(fit1))
+resid1=beauty$eval-predict(fit1)
+plot(predict(fit1),resid1)
+ggplot(beauty,aes(beauty,eval,col=female))+geom_point()+geom_abline(intercept = coef(fit1)[1],slope=coef(fit1)[2])+geom_abline(intercept = coef(fit1)[1]+coef(fit1)[3],slope=coef(fit1)[2])
+#2
+fit2=stan_glm(eval ~ beauty + female + beauty:female, data=beauty, refresh=0)
+print(fit2)
+median(bayes_R2(fit2))
+resid2=beauty$eval-predict(fit2)
+plot(predict(fit2),resid2)
+ggplot(beauty,aes(beauty,eval,col=female))+geom_point()+geom_abline(intercept = coef(fit2)[1],slope=coef(fit2)[2])+geom_abline(intercept = coef(fit2)[1],slope=coef(fit2)[2]+coef(fit2)[3])
+#3
+fit3=stan_glm(log(eval) ~ beauty + female, data=beauty, refresh=0)
+print(fit3)
+median(bayes_R2(fit3))
+resid3=log(beauty$eval)-predict(fit3)
+plot(predict(fit3),resid3)
+ggplot(beauty,aes(beauty,log(eval),col=female))+geom_point()+geom_abline(intercept = coef(fit3)[1],slope=coef(fit3)[2])+geom_abline(intercept = coef(fit3)[1]+coef(fit3)[3],slope=coef(fit3)[2])
+```
+*I'll choose the second model*
+*fisrtly, it's bayes R^2 is the largest*
+*Secondly, it residual vs fitted value scartterplot is distributed around y=0*
+
+
+
+## 12.14
+Prediction from a fitted regression: Consider one of the fitted models for mesquite leaves,  for example fit_4, in Section 12.6. Suppose you wish to use this model to make inferences  about the average mesquite yield in a new set of trees whose predictors are in data frame called  new_trees. Give R code to obtain an estimate and standard error for this population average.  You do not need to make the prediction; just give the code. 
+
+**the code is: **
+
+mes=read.table("C:/Users/dell/Documents/ROS/Mesquite/data/mesquite.dat",head=T)
+
+'r mes$canopy_volum=mes$diam1*mes$diam2*mes$canopy_height
+
+mes$canopy_area=mes$diam1*mes$diam2
+
+mes$canopy_shape=mes$diam1/mes$diam2
+
+fit4=stan_glm(log(weight)~log(diam1*diam2*canopy_height)+log(diam1*diam2)+log(diam1/diam2)+log(total_height)+log(density)+group,data=mes,subset=mes>0,refresh=0)*
+
+log(pre_mes)=predict(fit4,data=new_trees)
+
+print(pre_mes,mean(pre_mes),sd(pre_mes))
+```
+
+

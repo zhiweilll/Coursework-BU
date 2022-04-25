@@ -1,0 +1,294 @@
+---
+title: "Midterm Exam"
+author: "Wendy Liang"
+date: "Nov 2, 2020"
+output:
+  pdf_document: 
+          latex_engine: xelatex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE, message=FALSE,fig.align  = 'center')
+library(ggplot2)
+library(dplyr)
+library(pwr)
+library(corrgram)
+library(arm)
+library(loo)
+library(DAAG)
+library(bootstrap)
+```
+
+## Instruction
+
+This is your midterm exam that you are expected to work on it alone.  You may NOT  discuss any of the content of your exam with anyone except your instructor. This includes text, chat, email and other online forums.  We expect you to respect and follow the [GRS Academic and Professional Conduct Code](http://www.bu.edu/cas/files/2017/02/GRS-Academic-Conduct-Code-Final.pdf). 
+
+Although you may NOT ask anyone directly, you are allowed to use external resources such as R codes on the Internet.  If you do use someone's code, please make sure you clearly cite the origin of the code.
+
+When you finish, please compile and submit the PDF file and the link to the GitHub repository that contains the entire analysis.
+
+
+## Introduction
+
+In this exam, you will act as both the client and the consultant for the data that you collected in the data collection exercise (20pts).  Please note that you are not allowed to change the data.  The goal of this exam is to demonstrate your ability to perform the statistical analysis that you learned in this class so far.  It is important to note that significance of the analysis is not the main goal of this exam but the focus is on the appropriateness of your approaches.
+
+### Data Description (10pts)
+
+Please explain what your data is about and what the comparison of interest is.  In the process, please make sure to demonstrate that you can load your data properly into R.
+
+**1. Question: What to compare**
+
+I want to compare the sleep time of man and woman, among my close contacts.
+
+In addition, I wonder which sex spends longer time on smart phone, since using smart phone might be an impact factor of sleep time.
+
+**2. Method: How to collect data**
+
+I make a online questionnaire survey by app *Questionnaire Star*, setting several choices and completions. Then, I publish it on my social media *Wetchat* and ask my friends and families to finish it. Finally, I manually fill these data into a csv file.
+
+The following are my questions on the questionnaire:
+
+- 1.Your gender?
+
+- 2.Your age?
+
+- 3.How many hours do you sleep at night per day?
+
+- 4.What time do you fall asleep?
+
+- 5.What time do you get up?
+
+- 6.Do you take a nap after lunch? If you do, how many minutes do you sleep?
+
+- 7.How many hours do you use smart phone per day?
+
+- 8.What activities take most time when using smart phone?
+
+- 9. Within an hour before sleep, how many minutes do you use smart phone?
+
+- 10.Within an hour after getting up, how many minutes do you use smart phone?
+
+
+**3. My Dataset**
+
+- gender: 0 for woman; 1 for man;  
+- age: 1 for 0-20; 2 for 21-30; 3 for 31-40; 4 for 41-50; 5 for 51-60; 6 for 61-70; 7 for 71-80;  
+- sleep_time: the average time people sleep at night per day  
+- getup/asleep: the tome people get up or fall asleep  
+- nap: the average time people take a nap  
+- phone_time: the average time people use smart phones per day  
+- most_act: 1 for game; 2 for work/study; 3 for social media; 4 for video;  
+- before_sleep/after_getup: the time people use smart phones within an hour before sleep or after grtting up  
+
+```{r,results='hide'}
+sleep=data.frame(read.csv("sleep.csv"))
+sleep$gender=factor(sleep$gender,labels = c("female","male"))
+sleep$age=factor(sleep$age)
+sleep$most_act=factor(sleep$most_act)
+#n1=17,n2=8
+ind=sample(c(1:17),8)
+#ind=8,7,3,11,14,4,13,2
+sleep=sleep[c(2,3,4,7,8,11,13,14,18:25),]
+
+female=sleep %>% filter(gender=="female")
+n1=nrow(female)
+male=sleep %>% filter(gender=="male")
+n2=nrow(male)
+n1==n2
+n=n1
+
+```
+
+
+
+### EDA (10pts)
+
+```{r}
+p0=ggplot(sleep)+
+  geom_histogram(aes(x=sleep_time,fill=gender))
+# boxplot
+p1=ggplot(sleep)+
+  geom_boxplot(aes(x=gender,y=sleep_time,fill=gender))
+
+
+# continuous variables: line plot
+p2=ggplot(sleep)+
+  geom_point(aes(x=before_sleep,y=sleep_time,col=gender),size=2,alpha=0.5)
+
+p3=ggplot(sleep)+
+  geom_point(aes(x=after_getup,y=sleep_time,col=gender),size=2,alpha=0.5)
+
+p4=ggplot(sleep)+
+  geom_point(aes(x=phone_time,y=sleep_time,col=gender),size=2,alpha=0.5)
+
+p5=ggplot(sleep)+
+  geom_point(aes(x=nap,y=sleep_time,col=gender),size=2,alpha=0.5)
+
+cowplot::plot_grid(p0,p1,nrow=1)
+cowplot::plot_grid(p2,p3,p4,p5,nrow=2)
+```
+There are some findings from the plots:
+
+- The sleep_time of male is less than female  
+
+- most sample people sleep 7 hours per night  
+
+- there are non linear relationship between the phone related variables and sleep_time  
+  
+  
+### Power Analysis (10pts)
+
+Please perform power analysis on the project.  Use 80% power, the sample size you used and infer the level of effect size you will be able to detect.  Discuss whether your sample size was enough for the problem at hand.  Please note that method of power analysis should match the analysis. Also, please clearly state why you should NOT use the effect size from the fitted model.
+
+**1. test the variances of two groups**
+```{r }
+sd(sleep$sleep_time)
+var.test(sleep_time ~ gender, sleep, alternative = "two.sided")
+```
+
+The p-value is much more than 0.05, so we can say there's no significant difference between the sleep_time of male and female groups.
+
+So, next we can do t-test to test the mean values of the two groups.
+
+**2. calculate the effect size**
+```{r}
+pwr.t.test(n=n, sig.level = 0.05, power = 0.8 ,alternative = "two.sided",type = "two.sample")
+#pwr.anova.test(k=2,n=n,sig.level = 0.05, power = 0.8)
+```
+The result infers that the effect size is 1.51, which is large effect size respectively.
+
+I suppose the effect size is medium, d=0.5, I can detect more subtle difference between the two gender groups. That's also the reason why we should NOT use the effect size from the fitted model.
+
+```{r}
+pwr.t.test(d=0.5,sig.level = 0.05, power = 0.8 ,alternative = "two.sided")
+```
+
+In this case, we need the number of each group is **64**.
+
+
+### Modeling (10pts)
+
+Please pick a regression model that best fits your data and fit your model.  Please make sure you describe why you decide to choose the model. Also, if you are using GLM, make sure you explain your choice of link function as well.
+
+**1. choose the independent variables**
+```{r }
+correlation=data.frame(var(sleep))
+corrgram(sleep,order=T,
+         lower.panel=panel.shade, upper.panel=panel.pie,
+         diag.panel=panel.minmax, text.panel=panel.txt)
+```
+
+According to the correlation plot, I found that all the variables are correlated with **sleep_time**.   
+So, I choose the predictors by AIC in a stepwise algorithm, using `step()` function. As a result, `nap`,`age` will be the predictors.
+
+**2. build regression model**
+
+Firstly, I use linear regression model
+```{r}
+# complete
+fit0 = lm(sleep_time~gender+before_sleep+after_getup+phone_time+nap+age+most_act,data = sleep)
+fit1 =step(fit0,direction="both")
+summary(fit1)
+R1=summary(fit1)$r.squared
+
+# standard
+sleep$sleep_time_std=(sleep$sleep_time-mean(sleep$sleep_time))/sd(sleep$sleep_time)
+sleep$nap_std=(sleep$nap-mean(sleep$nap))/sd(sleep$nap)
+fit2=lm(sleep_time_std~gender+age+nap_std,data=sleep)
+summary(fit2)
+R2=summary(fit2)$r.squared
+
+# compare the R^2
+print(c(R1,R2))
+
+```
+
+These two regression model have the same result, so we choose the simplest one -- the first model.
+
+We can also try multilevel regression model as the following: 
+
+```{r, warning=FALSE}
+#### multilevel regression
+# varying in intercept of gender, considering without group variance
+fit3 = lmer(sleep_time~(1|gender)+age+nap,data = sleep)
+coef(fit3)$gender
+
+
+
+# varying in intercept and scope of gender, considering within group variance
+fit4=lmer(sleep_time~(1+gender|gender)+age+nap,data = sleep)
+coef(fit4)$gender
+
+print(c(AIC3=display(fit3)$AIC,AIC4=display(fit4)$AIC))
+```
+Since the $AIC4 > AIC3$, we choose the `lmer(formula = sleep_time ~ (1 | gender) + age + nap` model.
+
+According to the result, I found that the residual-fitted value plots of model 1 and model 3 are very similar. So I choose the model 1 for further work.
+
+
+### Validation (10pts)
+
+Please perform a necessary validation and argue why your choice of the model is appropriate.  
+
+```{r }
+fit1=lm(formula = sleep_time ~ gender + nap + age, data = sleep)
+layout(matrix(c(1,2,3,4),2,2))
+plot(fit1)
+
+# 10-fold cross validation
+cv.lm(fit1,data=sleep,m=10)
+```
+According to the Residuals vs Fitted plot and Normal Q-Q plot, the model 1 fit well when sleep_time in the range of [6, 7.3].
+
+In addition, the cross-validated standard error of estimate (overall cross-validation residual mean of square) is 2.28.
+
+
+
+### Inference (10pts)
+
+Based on the result so far please perform statistical inference to compare the comparison of interest.
+
+For male: 
+$$sleep\ time_{male} = 6.15-0.154nap+0.59age2+0.905age3$$
+For female:
+$$sleep\  time_{female} = 6.864-0.154nap+0.59age2+0.905age3$$
+```{r }
+conf_gender=confint(fit1)[1,]
+conf_gender
+```
+
+The CI of gender_male (regard gender_female as the baseline) doesn't include 0, so I reject the null hypothesis $H_0$: The sleep_time of male equals to the sleep_time of female. We can also calculate the difference of mean values of sleep_time between two groups is 0.71. In other words, the male sleep less than female.
+
+
+### Discussion (10pts)
+
+Please clearly state your conclusion and the implication of the result.
+
+In conclusion, male's average sleep time per night is 0.71 hours less than female's.
+
+
+### Limitations and future opportunity. (10pts)
+
+Please list concerns about your analysis.  Also, please state how you might go about fixing the problem in your future study.
+
+- The biggest limitation is that the assumption to use t test is the normal distribution of populations, however, I don't know the distribution of sleep_time. And I plan to use non-parametric test to revise it.
+
+- The before_sleep and after_getup both have big correlations with sleep_time, but AIC step method just drop these variables. I feel confused about it.
+
+- I might find that the different age periods has more impact on sleep_time than group by gender. And I plan to research difference of sleep_time between ages independently, or process the cluster analysis considering  all the categorical variables.
+
+
+### Comments or questions
+If you have any comments or questions, please write them here.
+- I want to know how to compare the multilevel model with linear model using R
+
+
+### Acknowledge
+I learn from these resources:
+
+1.[Quick-R by datacamp](https://www.statmethods.net/stats/power.html)
+
+2.[Weiping Zhang Homepage](http://staff.ustc.edu.cn/~zwp/teach/Math-Stat/mathstat.htm)
+
+3.*Data Analysis and Graphics with R*, Second Edition by Robert I. Kabacoff, published by Manning Publications. 178 South Hill Drive, Westampton, NJ 08060 USA. Copyright © 2015 by Manning Publications.

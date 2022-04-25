@@ -1,0 +1,503 @@
+---
+title: "MA678 Final Project"
+author: "Wendy Liang"
+date: "11/29/2020"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE,fig.align=,results='hide',echo=FALSE,message=FALSE,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(XML)
+library(RCurl)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+library(kableExtra)
+library(arm)
+library(readr)
+library(ggthemr)
+```
+
+
+# Data Cleaning
+## ---------------------------- Load the dataset --------------------------------
+```{r}
+main=read_csv("movies_metadata.csv")
+
+main$status = as.factor(main$status)
+main = main %>% filter (status == "Released")
+
+main$return = main$revenue/main$budget
+main$return[is.nan(main$return)]= NA
+main$return[is.infinite(main$return)]= NA
+
+library(lubridate)
+main$release_date=ymd(main$release_date)
+main$release_year=year(main$release_date)
+main$release_month=month(main$release_date)
+
+main$release_month=as.factor(month(main$release_date))
+
+```
+
+## ----------------- Extracting Values with Regular Expressions --------------
+Variables `belongs_to_collection`,`genres`,`production_companies`,`production_contries`,`spoken_languages` are in JSON format.
+
+I use `str_extract`, `str_c`, `str_split` functions in  `stringr` package to transform these JSON format variables. I also use the regex
+
+##### `genres`
+```{r}
+#observe
+genre_num <- str_count(main$genres, "\\}")
+genre_max = max(unique(genre_num))
+#max=8
+
+#split into 8 cols
+genre_df = str_split_fixed(main$genres, "\\}\\,\\s\\{", genre_max)
+genre_df = as.data.frame(genre_df,stringsAsFactors = FALSE)
+
+#regular expression
+genre_name <- as.data.frame(sapply(genre_df, function(x) str_extract(x, "(?<=name\\'\\:\\s{1}\\').+(?=\\')")), stringsAsFactors = F)
+   
+#combine V1-V8 into one col
+genre_name[is.na(genre_name)] <- ""
+
+main$genre_name=str_c(genre_name$V1,genre_name$V2,genre_name$V3,genre_name$V4,genre_name$V5,genre_name$V6,genre_name$V7,genre_name$V8,sep=",")
+
+#ifelse(str_detect(a,"Comedy"),1,0)
+
+main$genre1=genre_name$V1
+```
+
+
+# Overview
+
+In this project, I will try to gain some insights into the movie industry.I am always a big fan of movies, so I choose it as the topic of my mid term project. I divide my work into three parts:
+
+- Data Cleaning And Organization
+
+- Exploratory Data Analysis 
+
+- Modeling And Validation
+
+
+# Data Description
+
+My dataset contain metadata for all 45,000 movies listed in the Full MovieLens Dataset. The dataset consists of movies released on or before July 2017. Data points include cast, crew, plot keywords, budget, revenue, posters, release dates, languages, production companies, countries, TMDB vote counts and vote averages.I gain it from [Kaggle](https://www.kaggle.com/rounakbanik/the-movies-dataset).
+
+- **adult**: Indicates if the movie is X-Rated or Adult.
+
+- **belongs_to_collection**: A stringified dictionary that gives information on the movie series the particular film belongs to.
+
+- **budget**: The budget of the movie in dollars.
+
+- **genres**: A stringified list of dictionaries that list out all the genres associated with the movie.
+
+- **homepage**: The Official Homepage of the move.
+
+- **id**: The ID of the move.
+
+- **imdb_id**: The IMDB ID of the movie.
+
+- **original_language**: The language in which the movie was originally shot in.
+
+- **original_title**: The original title of the movie.
+
+- **overview**: A brief blurb of the movie.
+
+- **popularity**: The Popularity Score assigned by TMDB.
+
+- **poster_path**: The URL of the poster image.
+
+- **production_companies**: A stringified list of production companies involved with the making of the movie.
+
+- **production_countries**: A stringified list of countries where the movie was shot/produced in.
+
+- **release_date**: Theatrical Release Date of the movie.
+
+- **revenue**: The total revenue of the movie in dollars.
+
+- **runtime**: The runtime of the movie in minutes.
+
+- **spoken_languages**: A stringified list of spoken languages in the film.
+
+- **status**: The status of the movie (Released, To Be Released, Announced, etc.)
+
+- **tagline**: The tagline of the movie.
+
+- **title**: The Official Title of the movie.
+
+- **video**: Indicates if there is a video present of the movie with TMDB.
+
+- **vote_average**: The average rating of the movie.
+
+- **vote_count**: The number of votes by users, as counted by TMDB.
+
+
+# EDA
+
+###`release_date`
+
+##### 1.Which years and months released most movies?
+```{r}
+library(pheatmap)
+a=table(main$release_month[main$release_year>2000],main$release_year[main$release_year>2000])
+pheatmap(a,cluster_rows=FALSE,cluster_cols = FALSE,display_numbers = TRUE,number_format = "%.0f",main="Movise Number Heatmap")
+```
+- The number of released movies are increasing along with year, which indicates that the film industry in the world is thriving.  
+
+- It seems like **January** is the most movies released month. Summer is also a popular movie season since there are many movie released from **August** to **October**.
+
+##### 2.Which years and months have the highest revenue?
+```{r}
+
+
+b=main %>% group_by(release_month) %>% summarise(revenue = mean(revenue))
+bb=main %>% group_by(release_year) %>% summarise(revenue = mean(revenue))
+
+
+
+ggthemr('dust',type = "outer") 
+p1=ggplot()+
+  geom_line(data=bb,aes(x=release_year,y=revenue))+
+  xlab("Release Year") +
+  ylab("Movie Number") +
+  xlim(c(min(main$release_year,na.rm = TRUE),max(main$release_year,na.rm = TRUE)))+
+  ggtitle("Mean Revenue Of Each Year") +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title = element_text(size=10))
+
+p2=ggplot(data=b)+
+  geom_bar(aes(x=release_month,y=revenue),stat = "identity",width = 0.5)+
+  xlab("Release Month") +
+  ylab("Movie Number") +
+  ggtitle("Mean Revenue Of Each Month") +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title = element_text(size=10))
+
+cowplot::plot_grid(p1,p2,nrow = 2)
+```
+- During the very early period, the revenues are in very low level. However, the average revenue has an increasing overall trend among years. Especially in 2016, the yearly average revenue increased sharply.
+
+- **May** to **July** have the highest average revenue. This can be attributed to the fact that blockbuster movies are usually released in the summer when the kids are out of school and the parents are on vacation and therefore, the audience is more likely to spend their disposable income on entertainment.
+
+
+
+
+### `genre`
+
+##### 1. Which are the most commonly occurring genres?
+
+```{r}
+library(ggthemes)
+#devtools::install_github('cttobin/ggthemr')
+library(ggthemr)
+library(scales)
+
+genre_count_df = as.data.frame(table(unlist(genre_name)), stringsAsFactors = F)
+genre_count_df = genre_count_df[2:nrow(genre_count_df),]
+
+ggthemr('dust') #https://www.cnblogs.com/feffery/p/10393566.html
+ggplot(data=genre_count_df, aes(x = reorder(Var1, Freq),y = Freq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()+
+  xlab("") +
+  ylab("Movie Number") +
+  ggtitle("Count Of The Movie Genres") +
+  geom_label(aes(label=as.character(percent(Freq/sum(Freq),accuracy = 0.1))),size=2)+
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5))
+
+```
+
+- **Drama** is the most genre with 22.2% proportion among all the genres. Around 20000 movies are identified as drama, which is almost half the samples.
+
+- **Comedy** is the second most genre with 14.5% proportion and **Thriller** is the third most genre with 8.4% proportion.
+
+- The top 10 genres are Drama, Comedy, Thriller,Romance, Action, Horror, Crime, Documentary, Adventure, Science Fiction.
+
+
+##### 2. Which genres have the highest revenue?
+
+
+```{r}
+genre_count_df$revenue = NA 
+
+  for(i in 1:nrow(genre_count_df)){
+  gg = main %>% filter(str_detect(main$genre_name,genre_count_df$Var1[i])==TRUE)
+  genre_count_df$revenue[i] = mean(gg$revenue)
+  }
+
+genre_count_df$budget = NA
+  for(i in 1:nrow(genre_count_df)){
+  gg = main %>% filter(str_detect(main$genre_name,genre_count_df$Var1[i])==TRUE)
+  genre_count_df$budget[i] = mean(gg$budget)
+  }
+
+library(ggthemr)
+ggthemr('dust',type = "outer") 
+
+library(reshape)
+genre_melt_df=melt(as.data.frame(genre_count_df[,c(1,3,4)]),id.vars = 'Var1')
+ggplot(data=genre_melt_df, aes(x = reorder(Var1, value),y = value)) +
+  geom_bar(aes(fill=variable),stat = "identity",position = "dodge") +
+  coord_flip()+
+  xlab("") +
+  ylab("Revenue/Budget") +
+  ggtitle("Genre: Mean Revenue And Budget") +
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+```
+From this bar plot, it seems like large difference of revenue and budget between all the genres.
+
+- **Adventure** and **Fantasy** movies have the highest revenue and budget.
+
+- **Documentary** and **Foreign** movies have the lowest revenue and budget.
+
+
+## `revenue` and `budget`
+
+##### Correlation 
+```{r}
+library(corrgram)
+corrgram(main,order=T,
+         lower.panel=panel.shade, upper.panel=panel.pie,
+         diag.panel=panel.minmax, text.panel=panel.txt)
+```
+##### Relationship between **revenue** and **budget**
+
+To find relationships between these 2 variables for all the movies:
+
+```{r}
+library(ggthemr)
+ggthemr('dust',type = "outer") 
+p5=ggplot(main,aes(x=budget,y=revenue))+
+  geom_point(size=0.8,alpha=0.5)+
+  ggtitle("Relationship Between Budget And Revenue","Without Grouping By Genre")+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+```
+
+To find relationships between these 2 variables for different `genres` separately.
+
+```{r}
+p6=ggplot(main,aes(x=budget,y=revenue))+
+  geom_point(size=0.3)+
+  facet_wrap(~genre1)+
+  ggtitle("Relationship Between Budget And Revenue","Grouping By Genre")+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank(),axis.text = element_text(size=4))
+```
+Obviously, there are difference of revenue between different genres groups. So, I will do multilevel regression to explore how the **budget** impact the **revenue**, grouping the movies by **genre**.
+
+
+# Multilevel Model
+
+## Overview
+
+The question I'd like to explore is the relationship between movie revenue and budget. If possible, I also want to gain a significant model to estimate movie revenue.
+
+As the **Genres and Revenue** plot in EDA part, the group (**genre**) that a movie belongs to could determine their revenue in different ways. In this part, I'll consider the movies in Adventure, Animation,Comedy,Crime, Documentary, Drama,Family, Fantasy, Foreign, History, Horror, Music, Mystery, Romance, SCience Fiction, Thriller, TV Movie, War.
+
+As the **Months and Revenue** plot in EDA part, it seems like group(**months**) could also determine their revenue in different ways.
+
+In this part, I use the **Multilevel Model** (which is also called Hierarchical Model). The two grouping factors are **genre** and **months**, and covariate offsets as **budget** and **vote_count**. (According to the correlation plot, I find vote_count is strongly related to revenue.The reason why I choose vote_count as a covariant). 
+
+
+## Anova
+
+Firstly, I calculate the total standard deviation of the **revenue**, which equals to 66378054.37. It seems like **revenue** varies widely.
+
+```{r }
+paste("The standard deviation equals to",round(sd(main$revenue),2),", which is very large")
+```
+
+Next, I want to know the group-class variation among genres and months. I use `aov()` to calculate the p value of the two-side variance test, and use `TukeyHSD()` to compute the exact differences between levels.
+
+According to the Anova output, there are significant inter-class differences of revenue in the two groups (**genre** and **month**). In this case, multilevel model works! In details, there are many genres have significant difference, many have not. For examples, group **Drama** and **Animation** have significant difference while **Family** and **Action** have not. group **Jan** and **Jul** have significant difference while **March** to **May** have not.
+
+```{r}
+main$genre1=as.factor(main$genre1)
+```
+
+```{r}
+m1=aov(revenue ~ genre1, data=main)
+summary(m1)
+t1=TukeyHSD(m1)
+t1$genre1[order(t1$genre1[,4],decreasing = T),] #on top, no difference
+```
+
+```{r}
+m2=aov(revenue ~ release_month, data=main)
+summary(m2)
+t2=TukeyHSD(m2)
+t2$release_month[order(t2$release_month[,4],decreasing = T),] #on top, no difference
+```
+
+
+
+## Modeling
+
+### Complete-pooling model
+
+One estimate would be the average that completely pools data across all **genres**. This ignores variation among **genres**.
+
+I transform **budget** into $budget*10^{-7}$ to make the model run faster.
+
+Fit1: $-5797274+14963355*budget2+70595*vote\_count+genre1+5136467*Adventure+ $
+
+According to the output, budget2,vote_count,Adventure,Animation,Comedy,Documentary,Drama,Family, Romance are all very significant. The estimate of coefficients represent the contribution of certain genre to the revenue. The model fits not bad since the R square equals to 0.75
+
+```{r}
+main=main %>% filter(genre1!="")
+main$budget2=main$budget/10000000
+
+fit1 = lm(revenue~budget2+vote_count+genre1,data = main)
+summary(fit1)
+```
+ 
+##### Model with varying intercept
+
+Considering the case that each genre has a different revenue baseline, while the revenue increase rate at which budget increase is consistent across the genre groups. So, I would allow the intercept to vary by group(**genre**).
+
+The formula is:$$revenue - budget2+vote\_count+(1|genre1)$$
+
+The budget2 and vote are fixed effects  (constant slopes), while the set of random intercepts  is captured by genre1. 
+ 
+This strategy allows us to capture variation in the revenue baseline of each genre. However, there may be additional information we want to incorporate into our model.
+
+```{r}
+library(lme4)
+
+fit2=lmer(revenue ~ budget2+vote_count+(1|genre1),data=main)
+AIC2=display(fit2)$AIC
+
+#To see the estimated model within each months.
+#coef(fit2)$genre1
+```
+
+
+##### Model with varying intercept and slope
+
+Revenues of each genre have different baseline and change at different rates with budget depending on their genres.
+To incorporate both of these realities into our model, I allow both the budget slope and the intercept to vary depending on the movie genre. 
+
+The formula is:$$revenue - budget2+vote\_count+(1+budget2|genre1)$$
+
+```{r}
+fit3=lmer(revenue ~ budget2+vote_count+(1+budget2|genre1),data=main)
+AIC3=display(fit3)$AIC
+
+#coef(fit3)$genre1
+```
+
+
+##### Model with varying intercept among month and genre
+
+Here comes the more complex model, involving the grouping factor **month**. So there are two grouping factors in our formula. group1 **genre** has 20 levels and group2 **month** has 12 levels.
+
+The formula is:$$revenue - budget2+vote\_count+(1|genre1)+(1|release\_month)$$
+
+```{r}
+fit4=lmer(revenue ~ budget2+vote_count+(1|release_month)+(1|genre1),data=main)
+AIC4=display(fit4)$AIC
+
+#coef(fit4)$genre1
+```
+
+##### Model with varying intercept and slope among month and genre
+
+In my last model, I allow both the budget slope and the intercept to vary depending on the movie genre and month. 
+
+The formula is:$$revenue - budget2+vote\_count+(1+budget2|genre1)+(1+budget2|release\_month)$$
+```{r}
+fit5=lmer(revenue ~ budget2+vote_count+(1+budget2|release_month)+(1+budget2|genre1),data=main)
+AIC5=display(fit5)$AIC
+
+#coef(fit5)$genre1
+```
+
+
+## Comparision
+
+I have already fit 5 models, one linear model and four multilevel models. Now I decide to choose the best fitted multilevel model.
+
+Firstly, I plot error bar of all the model coefficients. It seems like Fit3 and Fit5 are better than other two through their estimate coefficient of **budget2**.
+
+```{r}
+errorbar=function(fit,coef,i){
+con_coefs=summary(fit)$coef
+## error bar for condition model
+con_coefs = data.frame(con_coefs)
+ggplot(con_coefs) + 
+  geom_point(aes(x=rownames(con_coefs),y=Estimate)) +
+  geom_errorbar(aes(x=rownames(con_coefs),ymin=Estimate-Std..Error,
+                    ymax=Estimate+Std..Error)) + 
+  #geom_point(aes(x=rownames(coefs),y= zero.Estimate),color="magenta")+ 
+  geom_point(aes(x=rownames(con_coefs),
+                 y=con_coefs[,1])) +    
+               labs(x="Independent Variables", y="Estimated Coefficients")+
+  ggtitle(paste("Error Bar: Fit",i))+
+  scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 8),
+        axis.title.y = element_text(size = 10),
+        axis.title.x = element_text(size = 10))
+}
+
+p1=errorbar(fit5,coefficients,5)
+p2=errorbar(fit2,coefficients,2)
+p3=errorbar(fit3,coefficients,3)
+p4=errorbar(fit4,coefficients,4)
+
+cowplot::plot_grid(p2,p3,p4,p1,nrow=2)
+```
+
+Then, I make the binned residual plots for all the multilevel models: fit2 to fit5.
+```{r}
+par(mfrow=c(2,2))
+
+binnedplot(fitted(fit2),resid(fit2))
+binnedplot(fitted(fit3),resid(fit3))
+binnedplot(fitted(fit4),resid(fit4))
+binnedplot(fitted(fit5),resid(fit5))
+```
+
+Then, I use `anova()` to compare the four models through the p value and AIC. According to the output,it seems like models with varying intercept and slope(fit3 and fit5) are better than other two(fit2 and fit4). Compared the AIC of fit3 and fit5 again, AIC's Fit5 is the minimum. So it's reasonable to regards Fit5 as the goal model.
+
+```{r}
+anova(fit2,fit3,refit=FALSE)
+anova(fit4,fit5,refit=FALSE)
+```
+
+
+## Validation
+
+Finally, I plot the residuals and fitted value plot. The residuals are nearby 0 when the fitted values stay in comparatively small range.
+
+```{r}
+pre=predict(fit5)
+res=residuals(fit5)
+new=data.frame(res,pre)
+
+ggplot(data=new)+
+  geom_point(aes(x=pre,y=res))+
+  geom_abline(slope=0,intercept = 0)+
+  ggtitle("Fit5:Residuals v.s Predicted Value")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.y = element_text(size = 10),
+        axis.title.x = element_text(size = 10))
+```
+
+## Conclusion and Limitation
+The result is the table below: 
+```{r}
+coef(fit5)$genre1
+```
+In fact, the AIC of Fit5 is also large. I cannot say this is a good model to estimate the movie revenue. All of my work
+
+
+
