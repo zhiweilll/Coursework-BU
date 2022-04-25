@@ -1,0 +1,367 @@
+---
+title: "Austen's Tagging Report"
+author: "Wendy Liang"
+date: "11/20/2020"
+output:
+  pdf_document: default
+latex_engine: xelatex
+---
+
+```{r setup, include=FALSE,message=FALSE,warning=FALSE,fig.align='center'}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(httr)
+library(tnum)
+library(magrittr)
+library(data.table)
+library(syuzhet)
+library(ggplot2)
+library(ggthemes)
+
+#anger anticipation disgust fear joy sadness surprise trust negative positive
+```
+
+## Data Organization
+
+### Observe the book structure
+```{r}
+tnum.authorize(ip="54.158.136.133")
+
+tnum.getDatabasePhraseList("subject", pattern= "*",levels=5)
+```
+There are 50 chapters in the *Sense and Sensibility*.
+
+
+### Tag Elinor,Marianne, Willoughby and Edward
+```{r results='hide'}
+#tnum.query("*Sense* has text = REGEXP(\"Elinor\")")
+tnum.tagByQuery("*Sense* has text = REGEXP(\"Elinor\")", adds=("w_elinor"))
+tag_elinor=tnum.query("@w_elinor",max=653)
+elinor=tnum.objectsToDf(tag_elinor)
+
+
+#tnum.query("*Sense* has text = REGEXP(\"Marianne\")")
+tnum.tagByQuery("*Sense* has text = REGEXP(\"Marianne\")", adds=("w_marianne"))
+tag_marianne=tnum.query("@w_marianne",max=524)
+marianne=tnum.objectsToDf(tag_marianne)
+
+cooccur = filter(marianne,grepl('w_elinor',tags))
+
+#tnum.query("*Sense* has text = REGEXP(\Willoughby\")")
+tnum.tagByQuery("*Sense* has text = REGEXP(\"Willoughby\")", adds=("w_willoughby"))
+tag_willoughby=tnum.query("@w_willoughby",max=200)
+willoughby=tnum.objectsToDf(tag_willoughby)
+
+#tnum.query("*Sense* has text = REGEXP(\Edward\")")
+tnum.tagByQuery("*Sense* has text = REGEXP(\"Edward\")", adds=("w_edward"))
+tag_edward=tnum.query("@w_edward",max=254)
+edward=tnum.objectsToDf(tag_edward)
+
+
+M_W=filter(willoughby,grepl('w_marianne',tags))
+E_E=filter(edward,grepl('w_elinor',tags))
+
+```
+
+
+### Separate the `subject` column
+```{r}
+mydf=function(df){
+  a=df %>% 
+  separate(subject,c("book","chapter","paragraph","sentence"),sep="/")%>%
+  separate(chapter,c("lable","chapter"),sep="-")%>%
+  separate(sentence,c("label1","sentence"),sep="-")%>%
+  separate(paragraph,c("label2","paragraph"),sep="-")%>%
+  select(book,chapter,paragraph,sentence,string.value)
+  a$chapter = as.numeric(a$chapter)
+  a$paragraph= as.numeric(a$paragraph)
+  a$sentence =as.numeric(a$sentence)
+  return(a)
+}
+
+df_elinor = mydf(elinor)
+df_marianne = mydf(marianne)
+df_cooccur = mydf(cooccur)
+df_MW = mydf(M_W)
+df_EE = mydf(E_E)
+```
+
+
+## EDA: Sentiment of Marianne and Elinor
+
+#### Add the NRC sentiment to the data
+```{r}
+#### add sentiment to elinor and marianne
+st_elinor=get_nrc_sentiment(df_elinor$string.value)
+st_df_elinor=cbind(df_elinor,st_elinor)
+
+st_marianee=get_nrc_sentiment(df_marianne$string.value)
+st_df_marianne=cbind(df_marianne,st_marianee)
+
+st_MW=get_nrc_sentiment(df_MW$string.value)
+st_df_MW=cbind(df_MW,st_MW)
+
+st_EE=get_nrc_sentiment(df_EE$string.value)
+st_df_EE=cbind(df_EE,st_EE)
+
+#### group_by and summarise for plot
+plot_st_df =function(st_df){
+  b=st_df %>%
+  group_by(chapter,paragraph) %>%
+  summarise(anger=sum(anger),anticipation=sum(anticipation),disgust=sum(disgust),fear=sum(fear),joy=sum(joy),sadness=sum(sadness),surprise=sum(surprise),trust=sum(trust),negative=sum(negative),positive=sum(positive))
+b$index=1:nrow(b)
+  return(b)
+}
+
+plot_st_elinor=plot_st_df(st_df_elinor)
+plot_st_marianne=plot_st_df(st_df_marianne)
+plot_st_MW=plot_st_df(st_df_MW)
+plot_st_EE=plot_st_df(st_df_EE)
+
+
+#### join elinor and marianne by chapter and paragraph
+plot_st=left_join(plot_st_elinor, plot_st_marianne,by=c("chapter","paragraph"))
+plot_st$positive=plot_st$positive.y-plot_st$positive.x
+plot_st$negative=plot_st$negative.y-plot_st$negative.x
+plot_st$anger=plot_st$anger.y-plot_st$anger.x
+plot_st$anticipation=plot_st$anticipation.y-plot_st$anticipation.x
+plot_st$disgust=plot_st$disgust.y-plot_st$disgust.x
+plot_st$fear=plot_st$fear.y-plot_st$fear.x
+plot_st$joy=plot_st$joy.y-plot_st$joy.x
+plot_st$sadness=plot_st$sadness.y-plot_st$sadness.x
+plot_st$surprise=plot_st$surprise.y-plot_st$surprise.x
+plot_st$trust=plot_st$trust.y-plot_st$trust.x
+plot_st$total_st=plot_st$anger+plot_st$anticipation+plot_st$disgust+plot_st$fear+plot_st$joy+ plot_st$sadness +plot_st$surprise +plot_st$trust
+plot_st$pn=plot_st$positive+plot_st$negative
+#+ plot_st$negative +plot_st$positive
+plot_st$index=1:nrow(plot_st)
+```
+
+
+#### Compare the total sentiment word counts of Marianne and Elinor
+```{r echo=FALSE}
+# the sentiment word counts of (marianne-elinor)
+d=sum((plot_st %>% filter(total_st>0)%>% select(total_st))[,2]) + sum((plot_st %>% filter(total_st<0)%>% select(total_st))[,2])
+
+ggplot(plot_st)+geom_bar(aes(x=index,y=total_st),stat = "identity", position = "dodge",width=3,fill="midnightblue")+
+    ggtitle(paste("The total sentiment word counts of Marianne is",d,"more than Elinor"),expression(paste(italic("Sense and Sensibility"))))+
+    ylab("total difference")+xlab("index (with the plot development)")+
+    theme_pander()+
+    scale_fill_pander()
+      
+```
+According to the plot, we can observe the different value of the sentiment word counts between Marianne and Elinor. When the bar is above the $y = 0$ axis, it means Marianne is related with more sentiment words. 
+
+Connecting with the characters in this book, I think this result is approporate. Elinor Dashwood is the sensible and reserved eldest daughter, and she represents the "sense" half of Austen's title *Sense and Sensibility*. Marianne Dashwood is the romantically inclined and eagerly expressive second daughter, and her emotional excesses identify her as the "sensibility" half of Austen's title. Obviously, Marianne related with more sentiment words is consistent with the characters' personalities.
+
+
+
+#### Explore the sentiment along with plot development
+
+Now, I want to research the sentiment trends of these two characters along with some important plots.
+```{r echo=FALSE}
+p1=ggplot(data = plot_st_elinor) +
+    geom_bar(aes(x=chapter,y=positive),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(negative)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment in ",italic("Sense and Sensibility"))),expression(paste(italic("Elinor"))))+
+    ylab("positive/negative")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+p2=ggplot(data = plot_st_marianne) +
+    geom_bar(aes(x=chapter,y=positive),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(negative)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment in ",italic("Sense and Sensibility"))),expression(paste(italic("Marianne"))))+
+    ylab("positive/negative")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+cowplot::plot_grid(p1,p2,nrow = 2)
+
+
+```
+We can match the sentiment words counts with certain important plots in the book, for examples: 
+
+- Chp9: more positive ---- Marianne met Willoughby
+
+- Chp25-26: more positive ---- Marianne and Elinor left home with Mrs. Jennings, and Marianne wished to meet Willoughby 
+
+- Chp33: more negative ---- Marianne and Elinor not happy with Mrs.Ferras in a party
+
+- Chp43:more negative ---- Marianne illed seriously for a long time
+
+- Chp47: more negative ---- Elinor knew Edward had married with Lucy and felt not good
+
+- Chp50: more positive ---- Marianne and Elinor both got married with loved one
+
+Marianne and Elinor are both positive figures in the *Sense and Sensibility*, they are kind and nice girls. And since this book is a not serious, dark story, Marianne and Elinor have more positive sentiment than negative sentiment in general.
+
+
+We can also see the same sentiment trends in these following plots, which xlim is divided into more detailed segments.
+```{r echo=FALSE}
+## find the last index of the chapter
+index_chp=function(i){
+  max((plot_st %>% filter(chapter<=i))$index)
+}
+
+ind_seg=rep(0,50)
+lab= rep(NA,50)
+for(i in 1:50){
+  ind_seg[i] = index_chp(i)
+  lab[i]=paste("chp",i)
+}
+
+
+# for label, segment 
+chp_text <- data.frame(x = ind_seg[c(5,10,15,20,25,30,35,40,45,50)], y = rep(20, 5), 
+                           label = lab[c(5,10,15,20,25,30,35,40,45,50)], 
+                           y1 = rep(19.5, 5), y2 = rep(-20, 5))
+
+p3=ggplot(data = plot_st) +
+    geom_bar(aes(x=index,y=positive.x),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=index,y=-(negative.x)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment in ",italic("Sense and Sensibility"))),expression(paste(italic("Elinor"))))+
+    ylab("positive/negative")+xlab("index (with the plot development)")+
+    geom_label(data = chp_text, aes(x, y, label=label), hjust = 0.5,vjust=0.5,
+                  label.size = 0, size = 3, color="#2b2b2b", inherit.aes = FALSE) +
+   geom_segment(data =chp_text, aes(x = x, y = y1, xend = x, yend = y2),colour="red",alpha=0.5) +
+    theme_pander()+
+    scale_fill_pander()
+
+
+p4=ggplot(data = plot_st) +
+    geom_bar(aes(x=index,y=positive.y),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=index,y=-(negative.y)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment in ",italic("Sense and Sensibility"))),expression(paste(italic("Marianne"))))+
+    ylab("positive/negative")+xlab("index (with the plot development)")+
+    geom_label(data = chp_text, aes(x, y, label=label), hjust = 0.5,vjust=0.5,
+                  label.size = 0, size = 3, color="#2b2b2b", inherit.aes = FALSE) +
+   geom_segment(data =chp_text, aes(x = x, y = y1, xend = x, yend = y2),colour="red",alpha=0.5) +
+    theme_pander()+
+    scale_fill_pander()
+
+cowplot::plot_grid(p3,p4,nrow = 2)
+```
+
+
+
+
+#### Co-occurence: Marianne & Willoughby | Elinor & Edward
+```{r echo=FALSE}
+p5=ggplot(data = plot_st_MW) +
+    geom_bar(aes(x=chapter,y=positive),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(negative)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment")),expression(paste(italic("Marianne and Willoughby"))))+
+    ylab("positive/negative")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+
+p6=ggplot(data = plot_st_MW) +
+    geom_bar(aes(x=chapter,y=joy),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(sadness)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment")),expression(paste(italic("Marianne and Willoughby"))))+
+    ylab("joy/sadness")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+p7=ggplot(data = plot_st_MW) +
+    geom_bar(aes(x=chapter,y=anticipation),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(anger)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ggtitle(expression(paste("Positive and Negative Sentiment")),expression(paste(italic("Marianne and Willoughby"))))+
+    ylab("antipation/anger")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+p8=ggplot(data = plot_st_MW) +
+    geom_bar(aes(x=chapter,y=trust),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(disgust)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    ylab("trust/disgust")+xlab("chapter")+
+   ggtitle(expression(paste("Positive and Negative Sentiment")),expression(paste(italic("Marianne and Willoughby"))))+
+    theme_pander()+
+    scale_fill_pander()
+
+
+p9=ggplot(data = plot_st_EE) +
+    geom_bar(aes(x=chapter,y=positive),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(negative)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    labs(subtitle=expression(paste(italic("Elinor and Edward"))))+
+    ylab("positive/negative")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+
+p10=ggplot(data = plot_st_EE) +
+    geom_bar(aes(x=chapter,y=joy),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(sadness)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    labs(subtitle=expression(paste(italic("Elinor and Edward"))))+
+    ylab("joy/sadness")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+p11=ggplot(data = plot_st_EE) +
+    geom_bar(aes(x=chapter,y=anticipation),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(anger)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    labs(subtitle=expression(paste(italic("Elinor and Edward"))))+
+    ylab("antipation/anger")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+p12=ggplot(data = plot_st_EE) +
+    geom_bar(aes(x=chapter,y=trust),stat = "identity", position = "dodge",fill="aquamarine3 ") +
+    geom_bar(aes(x=chapter,y=-(disgust)),stat = "identity", position = "dodge",fill= "midnightblue")+
+    labs(subtitle=expression(paste(italic("Elinor and Edward"))))+
+    ylab("trust/disgust")+xlab("chapter")+
+    theme_pander()+
+    scale_fill_pander()
+
+cowplot::plot_grid(p5,p9,nrow = 2)
+cowplot::plot_grid(p6,p10,nrow = 2)
+cowplot::plot_grid(p7,p11,nrow = 2)
+cowplot::plot_grid(p8,p12,nrow = 2)
+```
+
+Marianne was attracted to young, handsome, romantically spirited Willoughby.  
+Elinor become attached to Edward Ferrars, the brother-in-law of her elder half-brother, John.
+
+We can observe some interesting things in these plots. For examples,
+- In the **trust** sentiment plot: Marianne and Willoughby's trust sentiment increased first, then decreased. Elinor and Edward's trust sentiment increased first, then decreased, finally increased a lot. These two observations are consistent with the content of the book. Willoughby let Marianne down in the later period and married Brandon, while Elinor and Edward got married eventually after experiencing some twists and turns.
+
+- In the **joy** sentiment plot: In the final chapter, the joy sentiment words bars are very high since Edward proposed to Elinor and had a happy ending.
+
+There are many other interesting things to be discovered.
+
+
+#### Co-occurence of Elinor and Marianne
+```{r echo=FALSE}
+time_cooccur = df_cooccur %>% group_by(chapter) %>% 
+  summarise(times=n()) %>% 
+  arrange(desc(times))
+  
+  ggplot(time_cooccur) + 
+  geom_bar(aes(x=chapter,y=times),stat = "identity",fill="aquamarine3") +
+  geom_text(aes(x=chapter,y=times,label=times),hjust=0.5,vjust=-0.5,col="midnightblue ") + 
+  xlab("chapter") + ylab("times") + 
+  ggtitle("Marianne and Elinor Co-occurence",subtitle = "chapter distrubution")+
+    theme_pander()+
+    scale_fill_pander()
+```
+According to the plot, Elinor and Marianne co-occur most times in chapter 26 and 43. And they co-occur many times in chapter27 and 45 too. 
+
+In this book, Marianne and Elinor were always together and supported each other. I would like to use the last paragraph of *Sense and Sensibility* as the end: 
+
+> Between Barton and Delaford, there was that constant communication which strong family affection would naturally dictate;—and among the merits and the happiness of Elinor and Marianne, let it not be ranked as the least considerable, that though sisters, and living almost within sight of each other, they could live without disagreement between themselves, or producing coolness between their husbands.
+
+
+## Acknowledge
+
+- [tnum package](https://github.com/Truenumbers/tnum)  
+we use this package for text analysis
+
+- [get start with tnum](https://github.com/Truenumbers/tnum/tree/master/tnum/inst/Rmd)
+
+- [jane austen package](https://github.com/juliasilge/janeaustenr)  
+This package provides access to the full texts of Jane Austen's 6 completed, published novels. 
+
+- [`ggthemes` package](https://www.rdocumentation.org/packages/ggthemes/versions/3.5.0)
+

@@ -1,0 +1,12 @@
+name: TMDB_Shiny
+title: TMDB_Shiny
+username:
+account: wendy-liang
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3400620
+bundleId: 3988695
+url: https://wendy-liang.shinyapps.io/TMDB_Shiny/
+when: 1607977092.11107
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,0 +1,195 @@
+---
+title: "Mapping Assignment"
+author: 'Team 7: Rong Li, Minqi Li, Zhiwei Liang'
+date: "10/28/2020"
+output: pdf_document
+---
+
+```{r read_data, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+library(tidyverse)
+library(knitr)    
+library(stringr)
+library(ggmap)
+library(magrittr)
+library(dplyr)
+library(drat)
+library(hurricaneexposuredata)
+library(hurricaneexposure)
+library(magrittr)
+library(tmap)
+library(tmaptools)
+library(maps)
+library(usmap)
+library(sp)
+library(sf)
+library(leaflet)
+addRepo("geanders")
+```
+
+
+## The first map for Floyd-1999 made with ggplot2
+
+```{r, warning=FALSE}
+## load data
+data("hurr_tracks")
+data("rain")
+data(county.fips)
+
+MainStates <- map_data("state")
+AllCounty <- map_data("county")
+counties34 <- c("alabama", "arkansas", "connecticut", "delaware", "district of columbia",
+                "florida","georgia", "illinois", "indiana","iowa", "kansas", "kentucky", 
+                "louisiana","maine", "maryland","massachusetts", "michigan", "mississippi",
+                "missouri","new hampshire", "new jersey", "new york", "north carolina", 
+                "ohio", "oklahoma", "pennsylvania", "rhode island", "south carolina",
+                "tennessee", "texas","vermont","virginia", "west virginia", "wisconsin")
+my_states <- subset(MainStates, region %in% counties34)
+my_counties <- subset(AllCounty, region %in% counties34)
+
+## get the track data of storm Floyd-1999
+Floyd <- hurr_tracks[which(hurr_tracks$storm_id == "Floyd-1999"),]
+
+## get the rain data of storm Floyd-1999
+Floyd_rain <- rain %>% filter(storm_id == "Floyd-1999")
+sum_precip <- Floyd_rain %>% group_by(fips) %>% dplyr::summarise(Rainfall = sum(precip))
+rain_county <- fips_info(sum_precip$fips)
+Floyd_rain <- merge(sum_precip, rain_county, by = 'fips')
+Floyd_rain$county %<>% str_replace(" County","")
+Floyd_rain$full %<>% tolower()
+Floyd_rain$county %<>% tolower()
+Floyd_rain %<>% dplyr::rename(region=full, subregion=county)
+a <- subset(Floyd_rain, region %in% counties34)
+rainmap <- left_join(a, my_counties, by = c("region", "subregion"))
+
+rainmap <- rainmap %>% mutate('Rainfall (mm)' = cut(rainmap$Rainfall, 
+                                                   breaks = c(0, 25, 50, 75, 100, 125, 150, 175, 200, 225), 
+                                                   include.lowest = TRUE))
+
+ggplot() + 
+  geom_polygon(data=my_counties, aes(x=long, y=lat, group=group),
+               color="gray", fill="white", size = .1 ) + 
+  geom_polygon(data = rainmap, aes(x = long, y = lat, group = group, 
+                                   fill = `Rainfall (mm)`), 
+               color = "grey", size = 0.2, alpha = 1.6) + 
+  geom_polygon(data=my_states, aes(x=long, y=lat, group=group),
+               color="black", fill="white",  size = .5, alpha = .3) + 
+  geom_path(aes(x = Floyd$longitude, y = Floyd$latitude), color = "red", size=0.4) + 
+  scale_fill_brewer(palette = "Blues") + 
+  xlim(-108, -65) + 
+  ylim(23, 50) + 
+  ggtitle("Floyd-1999") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## The second map for Allison-2001 made with ggplot2
+
+```{r,warning=FALSE}
+## get the track data of storm Allison-2001
+Allison <- hurr_tracks[which(hurr_tracks$storm_id == "Allison-2001"),]
+
+## get the rain data of storm Floyd-1999
+Allison_rain <- rain %>% filter(storm_id == "Allison-2001")
+sum_precip <- Allison_rain %>% group_by(fips) %>% dplyr::summarise(Rainfall = sum(precip))
+sum_precip$fips %<>% as.numeric()
+Allison_rain <- left_join(sum_precip, county.fips, by = 'fips')
+Allison_rain %<>% separate(polyname, c("region", "subregion"), sep=",")
+rainmap <- left_join(my_counties, Allison_rain, by = c("region", "subregion"))
+
+rainmap %<>% mutate('Rain > 175 mm' = ifelse(rainmap$Rainfall < 175, "Unexposed", "Exposed"))
+rainmap <- na.omit(rainmap)
+
+ggplot() + 
+  geom_polygon(data=my_counties, aes(x=long, y=lat, group=group),
+               color="gray", fill="white", size = .1 ) + 
+  geom_polygon(data = rainmap, aes(x = long, y = lat, group = group, 
+                                   fill = `Rain > 175 mm`), 
+               color = "grey", size = 0.2, alpha = 1.6) + 
+  geom_polygon(data=my_states, aes(x=long, y=lat, group=group),
+               color="black", fill="white",  size = 0.5, alpha = .3) + 
+  geom_path(aes(x = Allison$longitude, y = Allison$latitude), color = "red", size=0.4) + 
+  scale_fill_manual(values = c("darkblue", "white")) + 
+  xlim(-107, -66) + 
+  ylim(25, 48) + 
+  ggtitle("Allison-2001") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## The third map for Floyd-1999 made with tmap
+```{r,warning=FALSE,fig.align='center'}
+#fips match location
+uscounty=st_as_sf(map('county',plot=F,fill=T))
+colnames(county.fips)[2]=colnames(uscounty)[1]
+uscounty=left_join(uscounty,county.fips,by='ID')
+
+#floyd rain
+rain_floyd=rain %>% filter(storm_id=='Floyd-1999')
+total_rain_floyd = rain_floyd %>% group_by(fips) %>% summarise(storm_id=storm_id[1],precip=sum(precip)) 
+total_rain_floyd = total_rain_floyd %>% mutate(fips=as.numeric(fips))
+total_rain_floyd <- total_rain_floyd %>%
+mutate('Rainfall(mm)' = cut(total_rain_floyd$precip,
+breaks = c(0, 25, 50, 75, 100, 125, 150, 175, 200, 225),
+include.lowest = TRUE))
+total_rain_floyd= right_join(uscounty,total_rain_floyd,'fips')
+
+
+#floyd track line
+hurr_floyd=hurr_tracks%>%filter(storm_id=="Floyd-1999")
+track_floyd=cbind(longitude=hurr_floyd$longitude,latitude=hurr_floyd$latitude)
+#the following codes refer to other's 
+track_floyd=SpatialLines(list(Lines(Line(track_floyd),ID='Floyd-1999')))
+
+
+#plot
+tm_shape(total_rain_floyd)+
+  tm_polygons(col='Rainfall(mm)',title="Rainfall",palette = "Blues")+
+tm_shape(track_floyd)+
+  tm_lines(col = "red",lwd = 3)+
+tm_layout(main.title="Floyd-1999 Rainfall",
+            main.title.position="center",
+             frame = FALSE) 
+```
+
+## The fourth map for Allison-2001 made with tmap
+
+We extract data from rain dataset and match fips with list format of longitude and latitude. Besides, we extract data from hurr_tracks dataset and process data into format that can be read with tmap packages.
+
+```{r,fig.align='center'}
+#fips match location
+uscounty=st_as_sf(map('county',plot=F,fill=T))
+colnames(county.fips)[2]=colnames(uscounty)[1]
+uscounty=left_join(uscounty,county.fips,by='ID')
+
+#floyd rain
+rain_allison=rain %>% filter(storm_id=='Allison-2001')
+total_rain_allison = rain_allison %>% group_by(fips) %>% summarise(storm_id=storm_id[1],precip=sum(precip)) 
+total_rain_allison = total_rain_allison %>% mutate(fips=as.numeric(fips))
+total_rain_allison <- total_rain_allison %>%
+mutate('Rain > 175 mm' = ifelse(total_rain_allison$precip > 175, "Exposed", "Unexposed"))
+total_rain_allison= right_join(uscounty,total_rain_allison,'fips')
+
+
+#floyd track line
+hurr_allison=hurr_tracks%>%filter(storm_id=="Allison-2001")
+track_allison=cbind(longitude=hurr_allison$longitude,latitude=hurr_allison$latitude)
+#the following codes refer to other's 
+track_allison=SpatialLines(list(Lines(Line(track_allison),ID='Allison-2001')))
+
+
+#plot
+tm_shape(total_rain_allison)+
+  tm_polygons(col='Rain > 175 mm' ,title="Rainfall",palette = "Blues",contrast = c(0.8,0))+
+tm_shape(track_allison)+
+  tm_lines(col = "red",lwd = 3)+
+tm_layout(main.title="Allison-1999 Rainfall",
+            main.title.position="center",
+             frame = FALSE) 
+```
+
+
+
+
+
+
