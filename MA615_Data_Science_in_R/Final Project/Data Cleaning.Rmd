@@ -1,0 +1,107 @@
+---
+title: "615 Final Project"
+author: "Wendy Liang"
+date: "12/13/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,fig.align = 'center',fig.height=3,fig.width=6)
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(XML)
+library(RCurl)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+library(kableExtra)
+library(arm)
+library(readr)
+library(ggthemr)
+```
+
+# Data Clean
+## Load Data
+
+```{r}
+#details=read.csv("tmdb_data.csv")
+#toprate=read.csv("top_rate.csv")
+```
+
+## Join Data
+```{r}
+#raw=left_join(toprate,details,"id")
+#write.csv(raw,"raw.csv")
+#write.csv(main,"top_rate_full.csv")
+main=read.csv("top_rate_full.csv")
+```
+
+
+##  Extract Values with Regular Expressions 
+Variables `genres`,`production_companies`,`production_contries`,`spoken_languages` are in JSON format. Transformation of these variables is done in Excel. In this part, I want to show how to clean this kind of raw data in R. So, I just take one variables for example.
+
+I use `str_extract`, `str_c`, `str_split` functions in  `stringr` package to transform these `spoken languages` in R. 
+```{r}
+#observe
+language_num <- str_count(main$spoken_language, "\\)")
+lan_max = max(unique(language_num))
+#max=10
+
+#split into 10 cols
+language_df = str_split_fixed(main$spoken_language, "\\,list", lan_max)
+language_df = as.data.frame(language_df,stringsAsFactors = FALSE)
+
+#regular expression
+language_name <- as.data.frame(sapply(language_df, function(x) str_remove_all(x, "list")), stringsAsFactors = F)
+
+language_name <- as.data.frame(sapply(language_name, function(x) str_remove_all(x, "\\(english_name = ")), stringsAsFactors = F)
+
+language_name <- as.data.frame(sapply(language_name, function(x) str_remove_all(x, '\\)')), stringsAsFactors = F)
+language_name <- as.data.frame(sapply(language_name, function(x) str_remove_all(x, '\\"')), stringsAsFactors = F)
+
+
+#combine Vi into one col
+language_name[is.na(language_name)] <-""
+
+main$spoken_language=str_c(language_name$V1,language_name$V2,language_name$V3,language_name$V4,language_name$V5,language_name$V6,language_name$V7,language_name$V8,language_name$V9,language_name$V10,sep=",")
+```
+
+```{r}
+#observe
+company_num <- str_count(main$production_companies, "list")
+com_max = max(na.exclude(unique(company_num)))
+#max=26
+
+#split into 8 cols
+company_df = str_split_fixed(main$production_companies, "\\,list", com_max)
+company_df = as.data.frame(company_df,stringsAsFactors = FALSE)
+
+#regular expression
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "list")), stringsAsFactors = F)
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, '"')), stringsAsFactors = F)
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "(?<=\\,\\s).+(?=\\})")), stringsAsFactors = F)
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "\\{name\\s\\=\\s")), stringsAsFactors = F)
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "\\,\\s\\}")), stringsAsFactors = F)
+#for one string
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "(?<=\\,).+")), stringsAsFactors = F)
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "\\,")), stringsAsFactors = F)
+
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "\\(")), stringsAsFactors = F)
+company_df <- as.data.frame(sapply(company_df, function(x) str_remove_all(x, "\\}")), stringsAsFactors = F)
+company_name=company_df
+
+#combine Vi into one col
+company_name[is.na(company_name)] <- ""
+
+main$production_companies=str_c(company_name$V1,company_name$V2,company_name$V3,company_name$V4,company_name$V5,company_name$V6,company_name$V7,company_name$V8,company_name$V9,company_name$V10,company_name$V11,company_name$V12,company_name$V13,company_name$V14,company_name$V15,company_name$V16,company_name$V17,company_name$V18,company_name$V19,company_name$V20,company_name$V21,company_name$V22,company_name$V23,company_name$V24,company_name$V25,company_name$V26,sep=",")
+```
+
+
+## Add two variables
+```{r}
+main$release_year=year(main$release_date)
+main$release_month=month(main$release_date)
+
+#write.csv(main,"movie_newest.csv")
+```

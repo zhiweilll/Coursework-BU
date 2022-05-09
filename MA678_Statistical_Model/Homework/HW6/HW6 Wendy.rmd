@@ -1,0 +1,270 @@
+---
+title: "MA678 homework 06"
+subtitle: "Multinomial Regression"
+author: "Wendy Liang"
+date: "Oct 22, 2020"
+output:
+  pdf_document: 
+     latex_engine: xelatex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,messege=FALSE,warning=FALSE,out.width="0.9\\linewidth",dev="pdf",fig.align  = 'center')
+pacman::p_load(
+  "ggplot2",
+  "knitr",
+  "arm",
+  "data.table",
+  "foreign",
+  "car",
+  "faraway",
+  "nnet",
+  "reshape2",
+  "VGAM",
+  "magrittr",
+  "dplyr"
+)
+```
+
+## Multinomial logit: 
+Using the individual-level survey data from the 2000 National Election Study (data in folder NES), predict party identification (which is on a five-point scale) using ideology and demographics with an ordered multinomial logit model.
+```{r, echo=FALSE}
+nes52 = read.dta("NES/data/nes5200_processed_voters_realideo.dta")
+nes52 = data.table(nes52)
+nes52_1 = nes52[ year==2000,]
+nes52_1$income = droplevels(nes52_1$income)
+nes52_1$partyid7 = droplevels(nes52_1$partyid7)
+nes52_1$gender = factor(nes52_1$gender, labels=c("male", "female"))
+nes52_1$race = factor(nes52_1$race, labels=c("white", "black", "asian", 
+                                    "native american", "hispanic"))
+nes52_1$south = factor(nes52_1$south)
+nes52_1$ideo = factor(nes52_1$ideo, labels=c("liberal", "moderate", "conservative"))
+
+nes52_comp = nes52_1[complete.cases(nes52_1[,list(partyid7,income,ideo,female,white)])]
+nes52_comp$ideology = scale(nes52_comp$ideo_feel,center=TRUE)
+
+```
+
+1. Summarize the parameter estimates numerically and also graphically. 
+```{r}
+fit1 = polr(partyid7~factor(ideo)+factor(gender),data=nes52_comp)
+summary(fit1)
+predx<- expand.grid(ideo = c("moderate","conservative","liberal"),gender=c("female","male"))
+predy<-predict(fit1,newdata=predx,type = "p")
+ggplot(melt(cbind(predx,predy),id.vars = c("gender","ideo")))+
+  geom_histogram(aes(x=ideo,y=value, fill=variable),stat="identity")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  facet_grid(~gender)
+```
+
+2. Explain the results from the fitted model.
+
+- log odds of not strong democrat = $log(\frac{\pi2+\pi3+\pi4+\pi5+\pi6+\pi7}{\pi1}) = \beta_1 moderate+\beta_2 conservative + \beta_3 female-c12 = 0.5176 + 0.7859 * moderate+ 1.9100 * conservative - 0.3703 * female$
+
+- log odds of not strong democrat and no weak democrat = $log(\frac{\pi3+\pi4+\pi5+\pi6+\pi7}{\pi1+\pi2})= \beta_1 moderate+\beta_2 conservative + \beta_3 female-c23 = -0.2747 + 0.7859 * moderate+ 1.9100 * conservative - 0.3703 * female$
+
+- log odds of not strong democrat, weak democrat nor independent-democrat = $log(\frac{\pi4+\pi5+\pi6+\pi7}{\pi1+\pi2+\pi3})= \beta_1 moderate+\beta_2 conservative + \beta_3 female-c34 = -1.0234 + 0.7859 * moderate+ 1.9100 * conservative - 0.3703 * female$
+
+- log odds of not strong democrat, weak democrat, independent-democrat nor independent-independent = $log(\frac{\pi5+\pi6+\pi7}{\pi1+\pi2+\pi3+\pi4})= \beta_1 moderate+\beta_2 conservative + \beta_3 female-c45 = -1.3914 + 0.7859 * moderate+ 1.9100 * conservative - 0.3703 * female$
+
+- log odds of weak republican or strong republican = $log(\frac{\pi6+\pi7}{\pi1+\pi2+\pi3+\pi4+\pi5})= \beta_1 moderate+\beta_2 conservative + \beta_3 female-c56 = -2.1535 + 0.7859 * moderate+ 1.9100 * conservative - 0.3703 * female$
+
+- log odds of strong republican = $log(\frac{\pi7}{\pi1+\pi2+\pi3+\pi4+\pi5\pi6+})= \beta_1 moderate+\beta_2 conservative + \beta_3 female-c67= -3.0906 + 0.7859 * moderate+ 1.9100 * conservative - 0.3703 * female$
+
+
+
+3. Use a binned residual plot to assess the fit of the model.
+```{r}
+nes52_2 = cbind(partyid7=nes52_comp$partyid7, female=nes52_comp$female, ideo=nes52_comp$ideo)
+nes52_2 <- data.frame(na.omit(nes52_2))
+resid = model.matrix(~factor(partyid7)-1, data=nes52_2)-fitted(fit1)
+par(mfrow=c(3,2))
+for(i in 1:6){
+  binnedplot(fitted(fit1)[,i], resid[,i])
+}
+
+```
+
+
+## Contingency table and ordered logit model
+
+In a prospective study of a new living attenuated recombinant vaccine for influenza, patients were randomly allocated to two groups, one of which was given the new vaccine and the other a saline placebo. The responses were titre levels of hemagglutinin inhibiting antibody found in the blood six weeks after vaccination; they were categorized as "small", "medium" or "large". 
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrr}
+  \hline
+treatment & small & moderate & large & Total \\ 
+  \hline
+placebo &  25 &   8 &   5 & 38 \\ 
+ vaccine &   6 &  18 &  11 & 35 \\ 
+   \hline
+\end{tabular}
+\end{table}
+The cell frequencies in the rows of table are constrained to add to the number of subjects in each treatment group (35 and 38 respectively). We want to know if the pattern of responses is the same for each treatment group.
+
+```{r,echo=FALSE}
+data = matrix(c(25,8,5,6,18,11), ncol = 3, byrow = TRUE)
+colnames(data) = c("small", "moderate","large")
+rownames(data) = c("placebo","vaccine")
+datatable = as.data.frame(data)
+colnames(datatable)[1]="treatment"
+colnames(datatable)[2]="level"
+colnames(datatable)[3]="count"
+datatable
+```
+
+1. Using a chisqure test and an appropriate log-linear model, test the hypothesis that the distribution of responses is the same for the placebo and vaccine groups.
+```{r}
+chisq.test(datatable)
+```
+
+2. For the model corresponding to the hypothesis of homogeniety of response distributions, calculate the fitted values, the Pearson and deviance residuals, and the goodness of fit statistics $X^2$ and $D$. Which of the cells of the table contribute most to $X^2$ and $D$? Explain and interpret these results.
+
+3. Re-analyze these data using ordered logit model (use `polr`) to estiamte the cut-points of a latent continuous response varaible and to estimate a location shift between the two treatment groups.  Sketch a rough diagram to illustrate the model which forms the conceptual base for this analysis.
+
+
+
+
+# High School and Beyond 
+The hsb data was collected as a subset of the High School and Beyond study conducted by the National Education Longitudinal Studies program of the National Center for Education Statistics. The variables are gender; race; socioeconomic status; school type; chosen high school program type; scores on reading, writing, math, science, and social studies. We want to determine which factors are related to the choice of the type of program—academic, vocational, or general—that the students pursue in high school. The response is multinomial with three levels.
+
+```{r}
+data(hsb)
+```
+
+1. Fit a trinomial response model with the other relevant variables as predictors (untransformed).
+```{r}
+fit2 = multinom(prog~read+write+math+science+race,data = hsb,trace=FALSE,HESS=TRUE) 
+summary(fit2)
+```
+
+2. For the student with id 99, compute the predicted probabilities of the three possible choices.
+
+```{r}
+predict(fit2,newdata=hsb[hsb$id==99,],type="probs")
+```
+
+
+
+# Happiness
+Data were collected from 39 students in a University of Chicago MBA class and may be found in the dataset `happy`.
+```{r}
+library(faraway)
+data(happy)
+```
+
+1. Build a model for the level of happiness as a function of the other variables.
+```{r}
+fit3 <-polr(factor(happy)~money+factor(sex)+factor(love)+factor(work),data=happy) 
+summary(fit3)
+```
+
+2. Interpret the parameters of your chosen model.
+$log\frac{\pi3+...+\pi10}{\pi1+\pi2} = 0.84 + 0.0178money-1.025sex_1 + 3.46love_2 +7.85love_3- 1.19work_2 +0.02work_3 +1.85work_4 +0.65work_5$
+For lonely people who are unsatisfactory with sex, with 0 family income, with happy index from 3 to 10 over the ones with happy index = 2, the log odd is 0.84
+
+3. Predict the happiness distribution for subject whose parents earn $30,000 a year,
+who is lonely, not sexually active and has no job.
+```{r}
+kable(predict(fit3,newdata=data.frame(love=1,sex=0,work=1,money=30),type="probs"))
+```
+
+
+
+# newspaper survey on Vietnam War
+A student newspaper conducted a survey of student opinions about the Vietnam War in May 1967. Responses were classified by sex, year in the program and one of four opinions. The survey was voluntary. The data may be found in the dataset `uncviet`.  Treat the opinion as the response and the sex and year as predictors. Build a proportional odds model, giving an interpretation to the estimates.
+
+```{r}
+data(uncviet)
+fit4 = polr(policy~sex+year,data=uncviet,weights = y,Hess = TRUE) 
+summary(fit4)
+```
+P(policy != A) is $exp(1.11+0.65sexmale+1.18yearGrad+0.40?yearJunior+0.54yearSenior+ 0.13yearSoph)$
+
+Holding other variable constant：
+
+- A male has opinions B,C or D is 1- exp(-0.65)=48% lower than a female.
+
+- A grad student has opinions B,C or D is exp(1.177)-1=224% higher than a freshman, holding other variable constant.
+
+- A junior student has opinions B,C or D is exp(0.396)-1=49% higher than a freshman.
+
+- A senior student has opinions B,C or D is exp(0.5444)-1=72% higher than a freshman.
+
+- A sophomore student has opinions B,C or D is exp(1.1315)-1=14% higher than a freshman, holding other variable constant.
+
+
+
+# pneumonoconiosis of coal miners
+The pneumo data gives the number of coal miners classified by radiological examination into one of three categories of pneumonoconiosis and by the number of years spent working at the coal face divided into eight categories.
+
+```{r}
+library(faraway)
+data(pneumo,package="faraway")
+```
+
+1. Treating the pneumonoconiosis status as response variable as nominal, build a model for predicting the frequency of the three outcomes in terms of length of service and use it to predict the outcome for a miner with 25 years of service.
+
+```{r}
+fit5_a = multinom(status~year,weights=Freq,data=pneumo)
+summary(fit5_a)
+pre1 = predict(fit5_a,newdata=data.frame(year=25),type = "probs")
+```
+
+2. Repeat the analysis with the pneumonoconiosis status being treated as ordinal. 
+
+```{r}
+fit5_b = polr(status~year,weights=Freq,data=pneumo) 
+summary(fit5_b)
+pre2 = predict(fit5_b,newdata=data.frame(year=25),type = "probs")
+```
+
+3.Now treat the response variable as hierarchical with top level indicating whether
+the miner has the disease and the second level indicating, given they have the
+disease, whether they have a moderate or severe case. 
+
+```{r}
+pneumo3=pneumo
+pneumo3$status = as.character(pneumo3$status)
+pneumo3$status[9:24] = "abnormal"
+pneumo3$status = as.factor(pneumo3$status)
+pneumo_abnormal = pneumo3[9:24, ]
+
+fit5_normal = glm( status ~ year, data = pneumo3, 
+                   family = binomial(link = "logit"), weights = Freq)
+fit5_abnormal = glm( status ~ year, data = pneumo_abnormal, 
+                     family = binomial(link = "logit"), weights = Freq)
+
+normal=predict (fit5_normal, newdata=data.frame(year=25), type = "response")
+severe=predict (fit5_abnormal, newdata=data.frame(year=25), type = "response") *
+  (1-predict (fit5_normal, newdata=data.frame(year=25), type = "response"))
+mild = (1-predict (fit5_abnormal, newdata=data.frame(year=25), type = "response")) *
+  (1-predict (fit5_normal, newdata=data.frame(year=25), type = "response"))
+
+pre3=c(normal,mild,severe)
+```
+
+4.  Compare the three analyses.
+
+```{r}
+kable(rbind(pre1,pre2,pre3=pre3))
+pneumo4 = dcast(pneumo, year ~ status, value.var = "Freq") 
+pneumo4 %<>% mutate(total=apply(pneumo4[,2:4],1,sum))
+pneumo4[,2:4] = round(pneumo4[,2:4]/pneumo4[,"total"],2) 
+pre1_1=predict(fit5_a,newdata=pneumo4,type="p")
+resid1=pneumo4[,2:4]-pre1_1
+par(mfrow=c(1,3))
+for(i in 1:3){
+  binnedplot(pre1_1[,i],resid1[,i])
+  }
+pre2_2<-predict(fit5_b,newdata=pneumo4,type="p")
+resid2=pneumo4[,2:4]-pre2_2
+par(mfrow=c(1,3))
+for(i in 1:3){
+  binnedplot(pre2_2[,i],resid2[,i])
+  }
+```
+
+- The result of the first two models are similar. But they both don't fit well.

@@ -1,0 +1,408 @@
+---
+title: "615 Final Project"
+author: "Wendy Liang"
+date: "12/13/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,fig.align = 'center',error = FALSE,fig.height=6,fig.width=8,results = "asis")
+library(lubridate)
+library(dplyr)
+library(stringr)
+library(XML)
+library(RCurl)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+library(kableExtra)
+library(arm)
+library(readr)
+library(ggthemr)
+```
+
+```{r}
+main=read.csv("movie_newest.csv")
+```
+
+# EDA
+### country
+
+```{r}
+country_count_df = as.data.frame(table(unlist(country_name)), stringsAsFactors = F)
+country_count_df = country_count_df[2:nrow(country_count_df),]
+country_count_df$Freq = as.numeric(country_count_df$Freq)
+
+country_count_df = country_count_df[order(country_count_df$Freq,decreasing = T),]
+country_count_df
+head(country_count_df,20)
+```
+
+
+```{r,eval=TRUE}
+library(devtools)
+#install_github('lchiffon/REmap')
+#https://blog.csdn.net/wzgl__wh/article/details/53108754
+library(REmap)
+data = data.frame(country = country_count_df$Var1,
+                   value = country_count_df$Freq)
+library(ggthemr)
+out=remapC(data,maptype = "world",color=c("red","orange","#db735c","white"),theme=get_theme(theme="none",backgroundColor = "white"),title = "Movie Production Country Map",subtitle = "Movie Production Country Map",mindata = min(data$value),maxdata = max(data$value))
+out
+```
+
+{<div align=center>![Interface 1](Movie Production Country Map.png)}
+
+- As we all known, the **U.S** is the biggest film-making country in the world. In the TMDB Top Rate Movie Dataset, there are 5884 top-rated movies from the U.S.
+
+- The film industry in **Europe** has also well developed. In particular, **U.K.** and **France** are the two most popular film-making countries in the world, just smaller than the U.S..
+
+- In **Asia**, movies produced from **Japan** and **China** are the two biggest good film-making countries, followed by **India**. 
+
+### genre
+```{r}
+#observe
+genre_num <- str_count(main$genres, "\\,")
+genre_max = max(na.exclude(unique(genre_num)))+1
+#max=8
+
+#split into 8 cols
+genre_df = str_split_fixed(main$genres, ",", genre_max)
+genre_name = as.data.frame(genre_df,stringsAsFactors = FALSE)
+   
+#combine V1-V8 into one col
+genre_name[is.na(genre_name)] <- ""
+```
+
+
+##### 1. Which are the most commonly occurring genres?
+
+```{r}
+library(ggthemes)
+#devtools::install_github('cttobin/ggthemr')
+library(ggthemr)
+library(scales)
+
+genre_count_df = as.data.frame(table(unlist(genre_name)), stringsAsFactors = F)
+genre_count_df = genre_count_df[2:nrow(genre_count_df),]
+
+ggthemr('dust',type = "outer") #https://www.cnblogs.com/feffery/p/10393566.html
+ggplot(data=genre_count_df, aes(x = reorder(Var1, Freq),y = Freq)) +
+  geom_bar(stat = "identity") +
+  coord_flip()+
+  xlab("") +
+  ylab("Movie Number") +
+  ggtitle("Count Of The Movie Genres") +
+  geom_label(aes(label=as.character(percent(Freq/sum(Freq),accuracy = 0.1))),size=2)+
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5))
+
+```
+
+- **Drama** is the most genre with 17.5% proportion among all the top-rated movies.
+
+- **Comedy** is the second most genre with 14.6% proportion and **Thriller** is the third most genre with 10.5% proportion.
+
+- The top 10 genres are Drama, Comedy, Thriller,Romance, Action, Horror, Crime, Adventure, Science Fiction and Family.
+
+
+##### 2. Which genres have the highest revenue?
+
+```{r}
+genre_count_df$revenue = NA 
+
+  for(i in 1:nrow(genre_count_df)){
+  gg = main %>% filter(str_detect(main$genres,genre_count_df$Var1[i])==TRUE)
+  genre_count_df$revenue[i] = mean(gg$revenue)
+  }
+
+genre_count_df$budget = NA
+  for(i in 1:nrow(genre_count_df)){
+  gg = main %>% filter(str_detect(main$genres,genre_count_df$Var1[i])==TRUE)
+  genre_count_df$budget[i] = mean(gg$budget)
+  }
+
+genre_count_df$return = NA
+  for(i in 1:nrow(genre_count_df)){
+  gg = main %>% filter(str_detect(main$genres,genre_count_df$Var1[i])==TRUE)
+  genre_count_df$return[i] = mean(gg$revenue)/mean(gg$budget)
+  }
+
+library(ggthemr)
+ggthemr('dust',type = "outer") 
+
+library(reshape)
+genre_melt_df=melt(as.data.frame(genre_count_df[,c(1,3,4)]),id.vars = 'Var1')
+ggplot(data=genre_melt_df, aes(x = reorder(Var1, value),y = value)) +
+  geom_bar(aes(fill=variable),stat = "identity",position = "dodge") +
+  coord_flip()+
+  xlab("") +
+  ylab("Revenue/Budget") +
+  ggtitle("Genre: Mean Revenue And Budget") +
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+ggplot(data=genre_count_df, aes(x = reorder(Var1,return),y = return)) +
+  geom_point(aes(size=return),alpha=0.8) +
+  coord_flip()+
+  xlab("") +
+  ylab("Return") +
+  ggtitle("Genre: Mean Return") +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5))
+```
+From this bar plot, it seems like large difference of revenue and budget between all the genres.
+
+- **Adventure** and **Fantasy** movies have the highest revenue and budget.
+
+- **Documentary** and **Foreign** movies have the lowest revenue and budget.
+
+-  Return(revenue/budget) indicates which kind of movies are profitable. Among the top-rated movies, **Music** is the most profitable genre, whose return is lager than 4. **Animation** and **Romance** rank second and third profitable genres. **Western** has the least return, followed by **History** and **War**. I think these kinds of movies need many grandeur that take too many money. 
+
+P.S. Since our dataset describes the top-rated movies, I guess the returns are lager than the average value of the industry. 
+
+
+###`release_date`
+
+##### 1.Which years and months released most movies?
+
+- The number of released movies are increasing in the recent 20 years, which indicates that the film industry in the world is thriving.  
+
+- It seems like summer is a popular movie season since there are many movie released from **August** to **October**.
+
+```{r}
+library(pheatmap)
+a=table(main$release_month[main$release_year>2000],main$release_year[main$release_year>2000])
+pheatmap(a,cluster_rows=FALSE,cluster_cols = FALSE,display_numbers = TRUE,number_format = "%.0f",main="Movise Number Heatmap")
+```
+
+
+##### 2.Which years and months have the highest revenue?
+
+- During the very early period , the revenues are in very low level. It's easy to understand, Surprisingly, there are several climax: 1937,1939,1942,1951 before 1950s. **Why?** I guess some outstanding movies were released in these years which made the average revenue higher. So, it cannot represent the entire movie revenue case at that time.
+
+- After 1950s, the average revenue has an increasing trend among years. After the 20th century, the annual average revenue has stayed stable.
+
+- Now, we discuss the monthly average revenue. From the second plot, it seems like **May** to **July** have the highest average revenue. This can be attributed to the fact that **blockbuster movies** are usually released in the summer when the kids are out of school and the parents are on vacation and therefore, the audience is more likely to spend their disposable income on entertainment. Moreover, these event movies are always high rated by audiences.
+
+
+```{r}
+
+
+b=main %>% group_by(release_month) %>% summarise(revenue = mean(revenue))
+bb=main %>% group_by(release_year) %>% summarise(revenue = mean(revenue))
+
+ggthemr('dust',type = "outer") 
+p1=ggplot(data=bb,aes(x=release_year,y=revenue))+
+  geom_line()+
+  xlab("Release Year") +
+  ylab("Revenue") +
+  xlim(c(min(main$release_year,na.rm = TRUE),max(main$release_year,na.rm = TRUE)))+
+  ggtitle("Mean Revenue Of Each Year") +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title = element_text(size=10),
+        axis.text.x = element_text(hjust=0.7))
+
+p2=ggplot(data=b)+
+  geom_bar(aes(x=release_month,y=revenue),stat = "identity",width = 0.5)+
+  xlab("Release Month") +
+  ylab("Revenue") +
+  ggtitle("Mean Revenue Of Each Month") +
+  theme(legend.position="none",
+        plot.title=element_text(hjust=0.5),
+        axis.title = element_text(size=10))
+
+cowplot::plot_grid(p1,p2,nrow = 2)
+```
+
+### company
+```{r}
+company_num <- str_count(main$production_countries, "\\,")
+company_df = str_split_fixed(main$production_companies, ",", 26)
+company_name = as.data.frame(company_df,stringsAsFactors = FALSE)
+company_name[is.na(company_name)] <- ""
+company_count_df = as.data.frame(table(unlist(company_name)), stringsAsFactors = F)
+company_count_df = company_count_df[2:nrow(company_count_df),]
+company_count_df$Freq = as.numeric(company_count_df$Freq)
+
+## top 1000 produce companies
+company_count_df = head(company_count_df[order(company_count_df$Freq,decreasing = T),],1000)
+
+#company_count_df =separate(company_count_df,Var1,c("company","company_country"),sep = "/",remove = FALSE)
+
+company_count_df$revenue = NA 
+  for(i in 1:nrow(company_count_df)){
+  gg = main %>% filter(str_count(main$production_companies,company_count_df$Var1[i])!=0)
+  company_count_df$revenue[i] = mean(gg$revenue)
+  }
+
+company_count_df$total_revenue = NA
+  for(i in 1:nrow(company_count_df)){
+  gg = main %>% filter(str_detect(main$production_companies,company_count_df$Var1[i])==TRUE)
+  company_count_df$total_revenue[i] = sum(gg$revenue)
+  }
+
+company_count_df$return = NA
+  for(i in 1:nrow(company_count_df)){
+  gg = main %>% filter(str_detect(main$production_companies,company_count_df$Var1[i])==TRUE)
+  company_count_df$return[i] = mean(gg$revenue)/mean(gg$budget)
+  }
+
+company_count_df=company_count_df %>% filter(is.na(revenue)==FALSE)
+```
+
+
+##### 1. Which companies earn the highest total revenue?
+```{r}
+company_1 = head(company_count_df[order(company_count_df$total_revenue,decreasing = T),],10)
+
+p3=ggplot(data=company_1, aes(x = reorder(Var1,total_revenue),y = total_revenue)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  coord_flip()+
+  xlab("") +
+  ylab("Total Revenue") +
+  geom_label(aes(label=as.character(round(total_revenue/10^9,1))),size=2)+
+  ggtitle("Top Earning Production Company") +
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+p4=ggplot(data=company_1, aes(x = reorder(Var1,Freq),y = Freq)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  coord_flip()+
+  xlab("") +
+  ylab("Produced Movie Number") +
+  geom_label(aes(label=as.character(Freq)),size=2)+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+cowplot::plot_grid(p3,p4,nrow=2)
+```
+
+- Undoubtedly, **Warner Bros** is the highest revenue earning movie production company among the most 50 successful companies. It has earned $\$$ 67.2 billion from 1248 movies.
+
+- **Universal** and **Universal Pictures** win the silver and bronze medals respectively, with $\$$ 58.5 billion from 10 movies and with $\$$ 55.4 billion from 825 movies.
+
+
+##### 2. Which companies made the highest-revenue movie?
+
+```{r}
+company_2 = head(company_count_df[order(company_count_df$revenue,decreasing = T),],10)
+
+p5=ggplot(data=company_2, aes(x = reorder(Var1,revenue),y = revenue)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  coord_flip()+
+  xlab("") +
+  ylab("Average Revenue") +
+  geom_label(aes(label=as.character(round(revenue/10^6,1))),size=2)+
+  ggtitle("Top Grossing Movie Production Company") +
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+p6=ggplot(data=company_1, aes(x = reorder(Var1,return),y = return)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  coord_flip()+
+  xlab("") +
+  ylab("Return") +
+  geom_label(aes(label=as.character(round(return,1))),size=2)+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+cowplot::plot_grid(p5,p6,nrow=2)
+```
+- Movies made by **Revolution Sun Studios** has the highest revenue -- $\$$ 541.4 million. Movies made by **Syncopy** has the second highest revenue --  $\$$ 536 million. We can also find familiar companies like **Marvel Studio** that has good grossing performance.
+
+- Movies made by **Fox Film Corporation** has the highest return of investment -- $ 360\% $. Movies made by **Walt Disney** has the second highest return of investment -- $ 330\% $.
+
+
+
+### Popularity, Vote Average and Vote Count
+
+##### 1.How the vote scores distribute?
+```{r}
+p7=ggplot(data=main,aes(x=vote_average,y=..density..))+
+  geom_histogram(alpha=0.5,bins = 20)+
+  geom_density(fill="#db735c",alpha=0.2)+
+  xlab("Average Vote") +
+  ggtitle("Distribution Of Average Vote")+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+p8=ggplot(data=main,aes(y=vote_average))+
+  geom_boxplot(fill="#db735c",alpha=0.2)+
+  ylab("Average Vote") +
+  ggtitle("Boxplot Of Average Vote")+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+
+cowplot::plot_grid(p7,p8,nrow=1)
+```
+
+This density plot shows the distribution of TMDB users' average vote to the TMDB Top Rate Movie Dataset. It seems like most vote scores concentrates on **6.4** to **7.6**. Few top-rated movies are voted below **4.8** and beyond **8.4** scores.
+
+
+##### 2.Dose Users get more strict along with time?
+
+From this plot, it seems like the overall rating trend is decreasing among the years. The annual average vote has decreased from 8 to 6 scores until 2017 and has increased a little form 2018.
+
+It's hard to say the audiences get more strict to assess a movie. There may be another explanation. There are less movies in the early year, but the percentage of high-rated movies is high. For these old movies, the TMDB users (modern people) can just notice and vote the outstanding ones while the low-quality movies are always ignored. In this case, the much higher average vote of old movies is reasonable.
+
+```{r}
+ggplot(data=main,aes(x=release_year,y=vote_average))+
+  geom_boxplot(aes(group=release_year),alpha=0.7)+
+  ylab("Average Vote") +
+  ggtitle("Boxplot Of Average Vote")+
+  theme(plot.title=element_text(hjust=0.5),legend.title = element_blank())
+```
+
+
+
+##### 3.What are the top reputable movies?
+
+Firstly, I filter the vote count that more than 2000. If the users who voted for a movie are too little, maybe the rating is not meaningful. Below is the top 20 reputable movies table: 
+
+```{r}
+vote_1 = main %>% filter(vote_count>2000)
+vote_1=head(vote_1[order(vote_1$vote_average,decreasing = T),],20)
+vote_1 = vote_1 %>% dplyr::select(production_countries,title,vote_average,release_year)
+kable(vote_1,format = 'html')
+```
+
+Not surprisingly **The Shawshank Redemption** and **The Godfather** are the two highest rated movies. In fact, these two famous movies are in all kind of Top Movies Lists in the world.
+
+It seems like the top rated movies are most old movies before 20th century. There are only two movies -- **Your Name** and **Parasite** released after 2010 rank the top 20. I believe many people are familiar with these two phenomenal movies from Asia. They are directed separately by the most famous directors in Japan and South Korea -- Makoto Niitsu and Bong Joon ho. By the way, **Parasite** won the Oscar last year.
+
+
+## Shiny App
+
+After cleaning and mapping, we build an interactive web app
+by Shiny to present our data and plots more visually.  
+There are two view: the first one is *Total Obligated Mapping*, the second oone is *Damage Category Count Barplot*.
+ Users can select the year, state and incident type
+
+
+
+Here is the link to our app: [FinalMapping Shiny](https://wendy-liang.shinyapps.io/TMDB_Shiny/).
+
+
+
+
+## Reference
+
+- [R shinydashboard example](https://www.jianshu.com/p/9983b8113470)
+
+- [TMDB API Doc](https://developers.themoviedb.org/3)
+
+- [Kaggle full movie dataset (2017)](https://www.kaggle.com/rounakbanik/the-movies-dataset)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

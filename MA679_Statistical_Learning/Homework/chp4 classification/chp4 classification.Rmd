@@ -1,0 +1,407 @@
+---
+title: "Chp4 Classification"
+author: "Wendy Liang"
+date: "2/8/2021"
+output:
+  pdf_document: 
+     latex_engine: xelatex
+---
+
+```{r setup, include=FALSE,message=FALSE,error=FALSE,fig.align='center'}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 4.6
+\includegraphics{4.6.jpg}
+
+### 4.8
+
+When K=1, it means we catch the exact point we need, so the training error rate is 0. However, the average error rate = (training error rate + test error rate) /2 = 18%, so we can calculate the test error rate = 36% > 20%.
+
+In conclusion, the logostic regression is better than the KNN method.
+
+
+### 4.9
+\includegraphics{4.9.jpg}
+
+
+### 4.10
+```{r}
+library(ISLR)
+
+# numeric
+summary(Weekly)
+attach(Weekly)
+
+# graphic
+corrgram::corrgram(Weekly[,-9])
+plot(Year,Volume)
+```
+
+- According to the correlation graph, it seems that only the Year and Volume have the relatively strong correlation, instead, the correlation between Lag and Today" are very weak.
+
+- According to the Year and Volume plot, we could find the Volume is exactly  increasing over time.
+
+#### (b)
+```{r}
+fit_6b <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = Weekly, family = binomial)
+summary(fit_6b)
+```
+
+Only Lag2 is statistically significant, as its p-value 0.0296 < 0.05.
+
+#### (c)
+
+```{r}
+probs = predict(fit_6b, type = "response")
+pred_6b = rep("Down", length(probs))
+pred_6b[probs > 0.5] = "Up"
+table(pred_6b, Direction)
+```
+
+The correct rate on the training data is (54+557)/1089 = 56.1065197%. In other words 43.8934803% is the training error rate. For weeks when Direction is "Up", the model is right 557/(48+557) = 92.0661157%. For weeks when Direction is "Down", the model is right 54/(54+430) = 11.1570248%.
+
+
+#### (d)
+
+```{r}
+train = (Year < 2009)
+Weekly_0910 <- Weekly[!train, ]
+Direction_0910 <- Direction[!train]
+fit_6d <- glm(Direction ~ Lag2, data = Weekly, family = binomial, subset = train)
+summary(fit_6d)
+
+
+prob_6d <- predict(fit_6d , Weekly_0910, type = "response")
+pred_6d  <- rep("Down", length(prob_6d ))
+pred_6d [prob_6d  > 0.5] <- "Up"
+table(pred_6d , Direction_0910)
+```
+
+The correct rate on the test data is (9+56)/104 = 62.5%. In other words 37.5% is the test error rate. For weeks when Direction is "Up", the model is right 56/(56+5) = 91.8032787%. For weeks when Direction is "Down", the model is right only 9/(9+34) = 20.9302326%.
+
+#### (e)
+```{r}
+library(MASS)
+fit_6e <- lda(Direction ~ Lag2, data = Weekly, subset = train)
+summary(fit_6e)
+
+pred_6e<- predict(fit_6e, Weekly_0910)
+table(pred_6e$class, Direction_0910)
+```
+
+These results are very close to those obtained with the logistic regression model which is not surpising.The correct rate on the test data is (9+56)/104 = 62.5%. In other words 37.5% is the test error rate. For weeks when Direction is "Up", the model is right 56/(56+5) = 91.8032787%. For weeks when Direction is "Down", the model is right only 9/(9+34) = 20.9302326%.
+
+#### (f)
+```{r}
+library(MASS)
+fit_6f <- qda(Direction ~ Lag2, data = Weekly, subset = train)
+summary(fit_6f)
+
+pred_6f<- predict(fit_6f, Weekly_0910)
+table(pred_6f$class, Direction_0910)
+```
+
+These results are very close to those obtained with the logistic regression model which is not surpising.The correct rate on the test data is (0+61)/104 = 58.6538462%. In other words 41.3461538% is the test error rate. For weeks when Direction is "Up", the model is right 100%. For weeks when Direction is "Down", the model is right only 0%.
+
+
+#### (g)
+```{r}
+library(class)
+train.X <- as.matrix(Lag2[train])
+test.X <- as.matrix(Lag2[!train])
+train.Direction <- Direction[train]
+set.seed(1)
+pred_6g <- knn(train.X, test.X, train.Direction, k = 1)
+table(pred_6g , Direction_0910)
+
+```
+
+These results are very close to those obtained with the logistic regression model which is not surpising.The correct rate on the test data is (21+31)/104 = 50%. In other words 50% is the test error rate. For weeks when Direction is "Up", the model is right 31/61 = 50.8196721%. For weeks when Direction is "Down", the model is right only 21/43 = 48.8372093%.
+
+#### (h)
+
+The logistic regression and LDA have the minimum test error rates, followed by QDA and KNN.
+
+
+#### (i)
+```{r}
+# Logistic regression with Lag2:Lag1
+fit.glm <- glm(Direction ~ Lag2:Lag1, data = Weekly, family = binomial, subset = train)
+probs <- predict(fit.glm, Weekly_0910, type = "response")
+pred.glm <- rep("Down", length(probs))
+pred.glm[probs > 0.5] = "Up"
+table(pred.glm, Direction_0910)
+mean(pred.glm == Direction_0910)
+
+# LDA with Lag2 interaction with Lag1
+fit.lda <- lda(Direction ~ Lag2:Lag1, data = Weekly, subset = train)
+pred.lda <- predict(fit.lda, Weekly_0910)
+mean(pred.lda$class == Direction_0910)
+
+
+# QDA with sqrt(abs(Lag2))
+fit.qda <- qda(Direction ~ Lag2 + sqrt(abs(Lag2)), data = Weekly, subset = train)
+pred.qda <- predict(fit.qda, Weekly_0910)
+table(pred.qda$class, Direction_0910)
+mean(pred.qda$class == Direction_0910)
+
+
+# KNN k =10
+pred.knn <- knn(train.X, test.X, train.Direction, k = 10)
+table(pred.knn, Direction_0910)
+mean(pred.knn == Direction_0910)
+
+
+# KNN k = 100
+pred.knn2 <- knn(train.X, test.X, train.Direction, k = 100)
+table(pred.knn2, Direction_0910)
+mean(pred.knn2 == Direction_0910)
+```
+
+The logistic regression and LDA have the lowest test error rates.
+
+
+### 4.11
+#### (a)
+```{r}
+attach(Auto)
+mpg01 <- rep(0, length(mpg))
+mpg01[mpg > median(mpg)] <- 1
+Auto <- data.frame(Auto, mpg01)
+```
+
+#### (b)
+
+```{r}
+cor(Auto[, -9])
+pairs(Auto)
+boxplot(cylinders ~ mpg01, data = Auto, main = "Cylinders vs mpg01")
+boxplot(displacement ~ mpg01, data = Auto, main = "Displacement vs mpg01")
+boxplot(horsepower ~ mpg01, data = Auto, main = "Horsepower vs mpg01")
+boxplot(weight ~ mpg01, data = Auto, main = "Weight vs mpg01")
+boxplot(acceleration ~ mpg01, data = Auto, main = "Acceleration vs mpg01")
+boxplot(year ~ mpg01, data = Auto, main = "Year vs mpg01")
+```
+
+There exists some association between “mpg01” and “cylinders”, “weight”, “displacement” and “horsepower”.
+
+
+#### (c)
+
+```{r}
+train <- (year %% 2 == 0)
+Auto.train <- Auto[train, ]
+Auto.test <- Auto[!train, ]
+mpg01.test <- mpg01[!train]
+```
+
+#### (d)
+
+```{r}
+fit.lda <- lda(mpg01 ~ cylinders + weight + displacement + horsepower, data = Auto, subset = train)
+fit.lda
+
+pred.lda <- predict(fit.lda, Auto.test)
+table(pred.lda$class, mpg01.test)
+mean(pred.lda$class != mpg01.test)
+```
+
+The test error rate of 12.6373626%.
+
+
+#### (e)
+```{r}
+fit.qda <- qda(mpg01 ~ cylinders + weight + displacement + horsepower, data = Auto, subset = train)
+fit.qda
+
+pred.qda <- predict(fit.qda, Auto.test)
+table(pred.qda$class, mpg01.test)
+mean(pred.qda$class != mpg01.test)
+```
+
+The test error rate of 13.1868132%.
+
+#### (f)
+```{r}
+fit.glm <- glm(mpg01 ~ cylinders + weight + displacement + horsepower, data = Auto, family = binomial, subset = train)
+summary(fit.glm)
+
+probs <- predict(fit.glm, Auto.test, type = "response")
+pred.glm <- rep(0, length(probs))
+pred.glm[probs > 0.5] <- 1
+table(pred.glm, mpg01.test)
+mean(pred.glm != mpg01.test)
+```
+
+The test error rate of 12.0879121%.
+
+#### (g)
+```{r}
+train.X <- cbind(cylinders, weight, displacement, horsepower)[train, ]
+test.X <- cbind(cylinders, weight, displacement, horsepower)[!train, ]
+train.mpg01 <- mpg01[train]
+set.seed(1)
+
+pred.knn <- knn(train.X, test.X, train.mpg01, k = 1)
+table(pred.knn, mpg01.test)
+mean(pred.knn != mpg01.test)
+
+pred.knn <- knn(train.X, test.X, train.mpg01, k = 10)
+table(pred.knn, mpg01.test)
+mean(pred.knn != mpg01.test)
+
+pred.knn <- knn(train.X, test.X, train.mpg01, k = 100)
+table(pred.knn, mpg01.test)
+mean(pred.knn != mpg01.test)
+
+```
+
+The test error rate of 15.3846154% for K=1, 16.4835165% for K=10, 14.2857143% for K=100. The K = 100 is the best.
+
+
+### 4.12
+
+#### (a)
+```{r}
+Power <- function() {
+    2^3
+}
+
+Power()
+```
+
+#### (b)
+```{r}
+Power2 <- function(x, a) {
+    x^a
+}
+
+Power2(3, 8)
+```
+
+#### (c)
+```{r}
+Power2(10, 3)
+Power2(8, 17)
+Power2(131, 3)
+```
+
+
+#### (d)
+```{r}
+Power3 <- function(x , a) {
+    result <- x^a
+    return(result)
+}
+```
+
+#### (e)
+```{r}
+x <- 1:10
+plot(x, Power3(x, 2), log = "xy", xlab = "Log of x", ylab = "Log of x^2", main = "Log of x^2 vs Log of x")
+```
+
+#### (f)
+```{r}
+PlotPower <- function(x, a) {
+    plot(x, Power3(x, a))
+}
+
+PlotPower(1:10, 3)
+```
+
+### 4.13
+
+```{r}
+library(MASS)
+attach(Boston)
+crim01 <- rep(0, length(crim))
+crim01[crim > median(crim)] <- 1
+Boston <- data.frame(Boston, crim01)
+
+train <- 1:(length(crim) / 2)
+test <- (length(crim) / 2 + 1):length(crim)
+Boston.train <- Boston[train, ]
+Boston.test <- Boston[test, ]
+crim01.test <- crim01[test]
+```
+
+
+```{r}
+fit.glm <- glm(crim01 ~ . - crim01 - crim, data = Boston, family = binomial, subset = train)
+
+
+probs <- predict(fit.glm, Boston.test, type = "response")
+pred.glm <- rep(0, length(probs))
+pred.glm[probs > 0.5] <- 1
+table(pred.glm, crim01.test)
+mean(pred.glm != crim01.test)
+```
+
+The test error rate of 18.18182%.
+
+```{r}
+fit.glm <- glm(crim01 ~ . - crim01 - crim - chas - nox, data = Boston, family = binomial, subset = train)
+
+probs <- predict(fit.glm, Boston.test, type = "response")
+pred.glm <- rep(0, length(probs))
+pred.glm[probs > 0.5] <- 1
+table(pred.glm, crim01.test)
+mean(pred.glm != crim01.test)
+```
+
+The test error rate of 15.81028%.
+
+```{r}
+fit.lda <- lda(crim01 ~ . - crim01 - crim, data = Boston, subset = train)
+pred.lda <- predict(fit.lda, Boston.test)
+table(pred.lda$class, crim01.test)
+mean(pred.lda$class != crim01.test)
+```
+
+The test error rate of 13.43874%.
+
+```{r}
+fit.lda <- lda(crim01 ~ . - crim01 - crim - chas - nox, data = Boston, subset = train)
+pred.lda <- predict(fit.lda, Boston.test)
+table(pred.lda$class, crim01.test)
+mean(pred.lda$class != crim01.test)
+```
+
+The test error rate of 15.01976%.
+
+```{r}
+train.X <- cbind(zn, indus, chas, nox, rm, age, dis, rad, tax, ptratio, black, lstat, medv)[train, ]
+test.X <- cbind(zn, indus, chas, nox, rm, age, dis, rad, tax, ptratio, black, lstat, medv)[test, ]
+train.crim01 <- crim01[train]
+set.seed(1)
+pred.knn <- knn(train.X, test.X, train.crim01, k = 1)
+table(pred.knn, crim01.test)
+mean(pred.knn != crim01.test)
+```
+
+The test error rate of 45.8498%.
+
+```{r}
+pred.knn <- knn(train.X, test.X, train.crim01, k = 10)
+table(pred.knn, crim01.test)
+mean(pred.knn != crim01.test)
+```
+
+The test error rate of 11.06719%.
+
+```{r}
+pred.knn <- knn(train.X, test.X, train.crim01, k = 100)
+table(pred.knn, crim01.test)
+mean(pred.knn != crim01.test)
+```
+
+The test error rate of 49.01186%.
+
+
+
+
+
+
+

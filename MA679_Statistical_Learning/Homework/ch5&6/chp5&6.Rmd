@@ -1,0 +1,192 @@
+---
+title: "Chp5&6 HW"
+author: "Wendy Liang"
+date: "2/13/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE,message=FALSE,error=FALSE,fig.align='center'}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### 6.2
+
+(a) iii. Less flexible and hence will give improved prediction accuracy when its increase in bias is less than its decrease in variance.
+
+(b) iii. Less flexible and hence will give improved prediction accuracy when its increase in bias is less than its decrease in variance.
+
+(c) ii. More flexible and hence will give improved prediction accuracy when its increase in variance is less than its decrease in bias.
+
+
+### 5.8
+
+#### (a)
+```{r}
+set.seed(1)
+y <- rnorm(100)
+x <- rnorm(100)
+y <- x - 2 * x^2 + rnorm(100)
+```
+
+n=100 and p=2
+$$Y = X−2X^2+\epsilon$$
+
+#### (b)
+```{r}
+plot(x, y)
+```
+
+The data obviously suggests a curved relationship
+
+#### (c)
+
+```{r}
+library(boot)
+set.seed(1)
+Data <- data.frame(x, y)
+
+#1
+fit.glm.1 <- glm(y ~ x)
+cv.glm(Data, fit.glm.1)$delta[1]
+
+#2
+fit.glm.2 <- glm(y ~ poly(x, 2))
+cv.glm(Data, fit.glm.2)$delta[1]
+
+#3
+fit.glm.3 <- glm(y ~ poly(x, 3))
+cv.glm(Data, fit.glm.3)$delta[1]
+
+#4
+fit.glm.4 <- glm(y ~ poly(x, 4))
+cv.glm(Data, fit.glm.4)$delta[1]
+```
+
+
+
+#### (d)
+
+```{r}
+set.seed(10)
+#1
+fit.glm.1 <- glm(y ~ x)
+cv.glm(Data, fit.glm.1)$delta[1]
+#2
+fit.glm.2 <- glm(y ~ poly(x, 2))
+cv.glm(Data, fit.glm.2)$delta[1]
+#3
+fit.glm.3 <- glm(y ~ poly(x, 3))
+cv.glm(Data, fit.glm.3)$delta[1]
+#4
+fit.glm.4 <- glm(y ~ poly(x, 4))
+cv.glm(Data, fit.glm.4)$delta[1]
+
+```
+
+
+#### (e)
+
+The LOOCV estimate for the test MSE is minimum for “fit.glm.2”,  we can also see clearly in (b) plot that the relation between “x” and “y” is quadratic.
+
+#### (f)
+
+```{r}
+summary(fit.glm.4)
+```
+
+The p-values show that the linear and quadratic terms are statistically significant and that the cubic and 4th degree terms are not statistically significant.
+
+
+
+
+
+
+### 6.10
+
+#### (a)
+
+```{r}
+set.seed(1)
+x <- matrix(rnorm(1000 * 20), 1000, 20)
+b <- rnorm(20)
+b[3] <- 0
+b[4] <- 0
+b[9] <- 0
+b[19] <- 0
+b[10] <- 0
+eps <- rnorm(1000)
+y <- x %*% b + eps
+```
+
+#### (b)
+
+```{r}
+train <- sample(seq(1000), 100, replace = FALSE)
+test <- -train
+x.train <- x[train, ]
+x.test <- x[test, ]
+y.train <- y[train]
+y.test <- y[test]
+```
+
+
+
+#### (c)
+
+```{r}
+library(leaps)
+data.train <- data.frame(y = y.train, x = x.train)
+regfit.full <- regsubsets(y ~ ., data = data.train, nvmax = 20)
+train.mat <- model.matrix(y ~ ., data = data.train, nvmax = 20)
+val.errors <- rep(NA, 20)
+for (i in 1:20) {
+    coefi <- coef(regfit.full, id = i)
+    pred <- train.mat[, names(coefi)] %*% coefi
+    val.errors[i] <- mean((pred - y.train)^2)
+}
+plot(val.errors, xlab = "Number of predictors", ylab = "Training MSE", pch = 19, type = "b")
+```
+
+#### (d)
+
+```{r}
+data.test <- data.frame(y = y.test, x = x.test)
+test.mat <- model.matrix(y ~ ., data = data.test, nvmax = 20)
+val.errors <- rep(NA, 20)
+for (i in 1:20) {
+    coefi <- coef(regfit.full, id = i)
+    pred <- test.mat[, names(coefi)] %*% coefi
+    val.errors[i] <- mean((pred - y.test)^2)
+}
+plot(val.errors, xlab = "Number of predictors", ylab = "Test MSE", pch = 19, type = "b")
+```
+
+#### (e)
+```{r}
+which.min(val.errors)
+```
+
+
+#### (f)
+
+```{r}
+coef(regfit.full, which.min(val.errors))
+```
+The best model caught all zeroed out coefficients.
+
+#### (g)
+
+```{r}
+val.errors <- rep(NA, 20)
+x_cols = colnames(x, do.NULL = FALSE, prefix = "x.")
+for (i in 1:20) {
+    coefi <- coef(regfit.full, id = i)
+    val.errors[i] <- sqrt(sum((b[x_cols %in% names(coefi)] - coefi[names(coefi) %in% x_cols])^2) + sum(b[!(x_cols %in% names(coefi))])^2)
+}
+plot(val.errors, xlab = "Number of coefficients", ylab = "Error between estimated and true coefficients", pch = 19, type = "b")
+```

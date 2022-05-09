@@ -1,0 +1,96 @@
+---
+title: "Linear Regression"
+author: "Wendy Liang"
+date: "2/5/2021"
+output:
+  pdf_document: 
+     latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+3.1, 3.2, 3.5, 3.6,3.11, 3.12, 3.13, 3.14
+
+### 3.1 Describe the null hypotheses to which the p-values given in Table 3.4 correspond. Explain what conclusions you can draw based on these p-values. Your explanation should be phrased in terms of sales, TV, radio, and newspaper, rather than in terms of the coefficients of the linear model.
+
+Answer：
+
+$H0_1:\beta_1=0$, $H0_2:\beta_1=0$, $H0_3:\beta_1=0$
+
+TV and radio are significant and newspaper is not significant according to the p values, so we reject $H0_1$ and $H0_2$ and accept $H0_3$. In other wowrd, newspaper do not affect sales.
+
+
+### 3.2 Carefully explain the differences between the KNN classifier and KNN regression methods.
+
+Answer:
+
+1) The KNN classifier: solve classification problems by identifying the neighborhood of $x_0$ and then estimating the conditional probability P(Y=j|X=$x_0$) for class j as the fraction of points in the neighborhood whose response values equal j. 
+
+2) The KNN regression: solve regression problems by identifying the neighborhood of $x_0$ and then estimating f($x_0$ ) as the average of all the training responses in the neighborhood.
+
+
+### 3.5
+
+\includegraphics{5.jpg}
+
+
+### 3.6 Using (3.4), argue that in the case of simple linear regression, the
+least squares line always passes through the point $(x bar, y bar)$.
+
+\includegraphics{6.jpg}
+
+
+### 3.11 
+In this problem we will investigate the t-statistic for the null hypothesis H0: beta=0 in simple linear regression without an intercept. To begin, we generate a predictor x and a response y as follows.
+```{r}
+set.seed(1)
+x=rnorm(100)
+y=2*x+rnorm (100)
+```
+
+##### a.
+```{r}
+fit1 <- lm(y ~ x + 0)
+summary(fit1)
+```
+coefficient = 1.9939, standard error = 0.1065 , t = 18.73, p-value = 2.2e-16 < 0.05, so we reject H0.
+
+##### b.
+```{r}
+fit2<- lm(x ~ y + 0)
+summary(fit2)
+```
+coefficient = 0.39111, the standard error =  0.02089, t = 18.73, p-value = 2.2e-16 < 0.05, so we reject H0.
+
+##### c.
+
+We obtain the same value for the t-statistic and consequently the same value for the corresponding p-value.
+
+
+##### d.
+```{r}
+n <- length(x)
+t <- sqrt(n - 1)*(x %*% y)/sqrt(sum(x^2) * sum(y^2) - (x %*% y)^2)
+as.numeric(t)
+```
+
+##### e.
+
+If we replace $x_i$ by $y_i$ in the formula for the t-statistic, the result would be the same.
+
+
+##### f.
+```{r}
+fit3 <- lm(y ~ x)
+summary(fit3)
+
+fit4 <- lm(x ~ y)
+summary(fit4)
+```
+
+
+### 3.12 This problem involves simple linear regression without an intercept.
+
+##### a.

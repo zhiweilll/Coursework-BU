@@ -1,0 +1,674 @@
+---
+title: "SEER Analysis on Medical Discrimination"
+author: "Yinfeng Zhou, Zhiwei liang, Xiaozhou Lu, Fan Feng"
+date: "2021/5/4"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+pacman::p_load("tidyverse","magrittr","readxl","caret","glmnet")
+library(kableExtra)
+library(dplyr)
+library(sqldf)
+library(reshape2)
+library(dplyr)
+library(corrgram)
+library(ggplot2)
+library(readxl)
+library(pscl)
+library(sandwich)
+library(lmtest)
+library(MASS)
+library(magrittr)
+theme_set(theme_bw())
+library(ggstance)
+library(kableExtra)
+library(gridExtra)
+library(randomForest)
+<<<<<<< HEAD
+<<<<<<< HEAD
+library(arm)
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+
+# Introduction
+
+The Surveillance, Epidemiology, and End Results (SEER) Program is an authoritative source for cancer statistics in the United States. It provides information on cancer statistics in an effort to reduce the cancer burden among the U.S. population. SEER is supported by the Surveillance Research Program (SRP) in NCI's Division of Cancer Control and Population Sciences (DCCPS). 
+
+In this project, we applied statistical analysis on the SEER dataset, in order to identify if there are any discremination on races, genders, ages or income levels during the treatment of head and neck cancers. To achieve our primary goal, we decompose the primary goal into several secondary goals.
+
+The first step of our analysis should be detecting if there is a significant difference between standard therapy and actual given therapy. Then, we will analyse if deviation from standard therapy will cause worse outcomes (such as more deaths). By statistical modelling, we are able to find what kind of people are more likely to be given different therapy from standard, and eventually have worse outcomes. 
+
+# Dataset Overview and Data Cleaning
+
+In this project, we used two datasets: the SEER dataset and the NCCN guidelines for head and neck cancers. 
+
+In the SEER dataset,  there are 36 columns with three main aspects: patients’ demographic information, average education and income level at the patient’s registry region, and information about the tumor and doctor’s treatment. In the NCCN guidelines, it provides standard therapy of tumors found in the head and neck, given their T stage and N stage. By referencing the Collaborative Stage Data Collection System Coding Instructions (CS Manual), we transformed the code of ‘tumor size’ , ‘cs extension’ into its corresponding T stage, and ‘lymph node’ into its corresponding N stage. 
+
+After transformation, we joined the NCCN guidelines dataset with SEER, so that we had information about standard therapy for each patient. 
+
+In the dataset, there are columns describing reasons for surgery and radiation. 
+
+For the reason of surgery, the values are : 
+<<<<<<< HEAD
+<<<<<<< HEAD
+
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+[1] "Surgery performed"                                                           
+[2] "Not recommended"                                                             
+[3] "Recommended, unknown if performed"                                           
+[4] "Not recommended, contraindicated due to other cond; autopsy only (1973-2002)"
+[5] "Recommended but not performed, unknown reason"                               
+[6] "Recommended but not performed, patient refused"                              
+[7] "Not performed, patient died prior to recommended surgery".
+<<<<<<< HEAD
+<<<<<<< HEAD
+
+We decided that the value "Not recommended" and "Not recommended, contraindicated due to other cond; autopsy only (1973-2002)" suggests the doctor didn’t recommend surgery, while the others suggest the doctor did. 
+
+For the reason of radiation, the values are:
+
+=======
+We decided that the value "Not recommended" and "Not recommended, contraindicated due to other cond; autopsy only (1973-2002)" suggests the doctor didn’t recommend surgery, while the others suggest the doctor did. 
+
+For the reason of radiation, the values are:
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+We decided that the value "Not recommended" and "Not recommended, contraindicated due to other cond; autopsy only (1973-2002)" suggests the doctor didn’t recommend surgery, while the others suggest the doctor did. 
+
+For the reason of radiation, the values are:
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+[1] "Beam radiation"                                       
+[2] "None/Unknown"                                         
+[3] "Radiation, NOS  method or source not specified"       
+[4] "Refused (1988+)"                                      
+[5] "Recommended, unknown if administered"                 
+[6] "Radioactive implants (includes brachytherapy) (1988+)"
+[7] "Combination of beam with implants or isotopes"        
+[8] "Radioisotopes (1988+)"    
+We decided that if the value is "None/Unknown" , it suggests that the doctor didn’t recommend radiation. 
+
+Furthermore, since the sequence of radiation, surgery and chemotherapy is ambiguous in the seer dataset, we simplified the comparison between standard therapy and recommended therapy, by only considering if surgery, radiation and chemotherapy are contained in the standard therapy. For example, if there is surgery in standard therapy, no matter which one it is in, we would denote the column “surgery_standard” as 1. If the doctor also recommended surgery, then the column “Diff_Reco_Sur” will be 0, indicating there is no difference between recommended therapy and standard therapy. 
+
+In conclusion, we managed to join NCCN guidelines standard therapy to the seer data set, and compared them with recommended therapy. 
+
+From these information, we were able to create several binary response variables:
+Diff_Reco_Sur : 1 indicates difference in surgery, 0 indicates not.
+Diff_Reco_Rad:1 indicates difference in radiation, 0 indicates not.
+Diff_Reco_Chem:1 indicates difference in chemotherapy, 0 indicates not.
+surgery_refused: 1 indicates the patient refused recommended surgery
+radiation_refused:  1 indicates the patient refused recommended radiation
+
+# Exploratory Data Analysis
+
+```{r}
+seer<- read.csv("seer_final.csv",header = T)
+<<<<<<< HEAD
+<<<<<<< HEAD
+seer = seer[,-1]
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+
+```{r}
+#colnames(seer)
+seer$Nine_Grade%<>%as.numeric()
+seer$High_School%<>%as.numeric()
+seer$Atleast_Bachlor%<>%as.numeric()
+seer$Person_Below_Poverty%<>%as.numeric()
+seer$Unemployed%<>%as.numeric()
+seer$Median_Household_Income%<>%as.numeric()
+seer$Language_Isolation%<>%as.numeric()
+seer$Survival_Months%<>%as.numeric()
+<<<<<<< HEAD
+<<<<<<< HEAD
+
+seer$Vital_Status%<>%as.factor()
+seer_final$Race%<>%as.factor()
+seer_final$Insurance%<>%factor()
+seer_final$Sex%<>%factor
+```
+
+```{r}
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+seer$Vital_Status%<>%as.factor()
+
+
+seer$Nine_Grade= seer$Nine_Grade/100
+seer$High_School= seer$High_School/100
+seer$Atleast_Bachlor= seer$Atleast_Bachlor/100
+seer$Person_Below_Poverty= seer$Person_Below_Poverty/100
+seer$Unemployed= seer$Unemployed/100
+seer$Median_Household_Income = seer$Median_Household_Income*10
+seer$Language_Isolation = seer$Language_Isolation/100
+```
+
+```{r}
+
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+race_community<- sqldf("select Race, avg(Nine_Grade) as NineGrade, avg(High_School) as HighSchool, avg(Atleast_Bachlor) as Bachlor, avg(Person_Below_Poverty) as BelowPoverty, avg(Unemployed) as Unemployed, avg(Median_Household_Income) as Income, avg(Language_Isolation) as LanguageIsolation from seer
+                       group by Race")
+
+melt_race<- melt(race_community,id.vars=c("Race"),
+                measure.vars = c("NineGrade","HighSchool","Bachlor","BelowPoverty","Unemployed","LanguageIsolation"),
+                variable.name = "community")
+```
+### Demographic Analysis
+
+For our projects focus on exploring if there is any discrimination in the process of treatment for head and neck cancer, we first visualized the relationship between Races and other demographic information containing countywide education level, household income and language isolation level. 
+First we plotted the distribution between categorical variables: Sex, Race and Insurance. The boxplot below shows that, in different races, it seems that there are some imbalances of gender. There are more male diagnosed head and neck cancers than female in white people.
+
+```{r,echo=FALSE,message=FALSE}
+seer%>%group_by(Race,Sex)%>%summarise(count=n())%>%group_by(Race)%>%
+  summarise(count=count,percent=count/sum(count),Sex=Sex)->g1
+```
+
+```{r}
+library(ggthemes)
+#devtools::install_github('cttobin/ggthemr')
+library(ggthemr)
+library(scales)
+ggthemr('dust',type = "outer")
+
+#,fig.height=3,fig.width=4}
+ggplot(g1,aes(x=Race,y=count,fill=Sex))+
+  geom_histogram(stat="identity",position = "stack")+
+    coord_flip()+
+<<<<<<< HEAD
+<<<<<<< HEAD
+  labs(title="Patients' Race and Sex")+
+  geom_text(mapping = aes(label =round(percent,2)), size = 3,colour = 'black',
+            position = position_stack(0.6))
+```
+The density plot below, on the other hand, shows that among head and neck patients, different races have different distributions. In general, patients from white people are older, while Asian or Pacific Islander have the youngest patients.
+```{r}
+ggthemr_reset() # for theme
+
+ggplot(seer,aes(fill=Race,col=Race,x=Age))+ geom_density(alpha=.1)+
+theme(panel.background = element_rect(fill = 'white'))+
+labs(title="Race Distribution")+
+theme_wsj(base_size = 9)
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+  geom_text(mapping = aes(label =round(percent,2)), size = 3,colour = 'black',
+            position = position_stack(0.6))
+  
+```
+The density plot below, on the other hand, shows that among head and neck patients, different races have different distributions. In general, patients from white people are older, while Asian or Pacific Islander have the youngest patients.
+```{r}
+
+ggthemr_reset()
+ggplot(seer,aes(fill=Race,col=Race,x=Age))+ geom_density(alpha=.2)+
+theme(panel.background = element_rect(fill = 'white'))+
+theme_wsj(base_size = 10)
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+In the boxplot below, we can also tell that different races have different distributions of Insurance. For example, white people generally have less Any Medicaid.
+```{r,echo=FALSE,message=FALSE}
+seer%>%group_by(Insurance,Race)%>%summarise(count=n())%>%group_by(Race)%>%summarise(count=count,percent=count/sum(count),Insurance=Insurance)->g2
+```
+
+```{r}
+<<<<<<< HEAD
+<<<<<<< HEAD
+ggthemr('dust',type = "outer")
+
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+ggplot(g2,aes(x=Race,y=count,fill=Insurance))+
+  geom_histogram(stat="identity",position = "stack")+
+  geom_text(mapping = aes(label =round(percent,2)), size = 2, colour = 'black',
+            position = position_stack(0.6))+
+  #theme(axis.text.x  = element_text(angle=30, vjust=0.5))
+  scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+<<<<<<< HEAD
+<<<<<<< HEAD
+  labs(title="Insurance Information to different Races")+
+  theme( axis.text.x =element_text(vjust=0.5,size = 8))
+=======
+  theme(
+        axis.text.x =element_text(vjust=0.5))
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+  theme(
+        axis.text.x =element_text(vjust=0.5))
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+
+In the line chart below, NineGrade stands for average countywide percentage of residents with only ninth grade of education level and the same is true for HighSchool, and Bachelor stands for average countywide percentage of residents with at least a bachelor’s degree of education level. BelowPoverty and Unemployed stands for the average countywide percentage of residents’ poverty rate and unemployment rate. LanguageIsolation stands for the average countrywide percentage of residents to be linguistically isolated when a household with all members above the age of 14 speak non-English language or speak English less than “very well”.
+
+```{r,echo=FALSE}
+ggthemr_reset()
+race_percent<- ggplot(data=melt_race)+
+  geom_line(mapping=aes(x=Race,y=value,group=community,color=community))+
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+  scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+  scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+  labs(title="Community Information to different Races", x="Race",y="Percentage" )+
+  theme(panel.background = element_rect(fill = 'white'))+
+theme_wsj(base_size = 8)
+race_percent
+```
+
+From the line chart above we can see that NineGrade, HighSchool, Bachelor and LanguageIsolation shows a similar pattern towards Race. It is a vague impression on how these features vary between different races, so we call this pattern with a relatively higher value for Asian or Pacific Islander and a relatively lower value for some other races like American Indian/Alaska Native or Black pattern 1 for better illustration. While BelowPoverty and Unemployed shows a similar pattern which is opposite from pattern 1, and we call this pattern 2. The income information is also similar to pattern 1 as you can see below, where Income stands for average countywide household income.
+
+```{r,echo=FALSE}
+<<<<<<< HEAD
+<<<<<<< HEAD
+ggthemr('dust',type = "outer")
+
+race_income<- ggplot(data=race_community)+
+  geom_bar(aes(x=Race,y=Income,fill=Race),stat="identity")+
+  labs(title="Average Income to different Races", x="Race",fill="Race")+
+  theme(legend.position = 'none',plot.title = element_text(size=12,hjust = 0.5),axis.text.x = element_text(size=8))
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+race_income<- ggplot(data=race_community)+
+  geom_bar(aes(x=Race,y=Income,fill=Race),stat="identity")+
+  scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+  labs(title="Average Income to different Races", x="Race",fill="Race")+
+  theme(legend.position = 'none',plot.title = element_text(size=10,hjust = 0.5))
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+race_income
+```
+
+### Clinical Information Analysis
+To combine the demographic information together with clinical information, we also plotted a box plot comparing the average survival months after being diagnosed between different races. And the result also indicates to be similar to pattern 1 as it is shown in the following box plot.
+
+```{r}
+race_survival<- ggplot(data=seer, aes(x = Race, y = as.numeric(Survival_Months), fill =Race)) +
+<<<<<<< HEAD
+<<<<<<< HEAD
+        geom_boxplot(alpha=0.6) +
+        scale_y_continuous(name = "Survival Month")+
+        #scale_x_discrete(name = "Race")+
+        labs(title="Average Survival Months to Different Races", fill="Race")+
+  theme(legend.position = 'none',plot.title = element_text(size=12,hjust = 0.5),axis.text.x = element_text(size=8))
+race_survival
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+        geom_boxplot(alpha=0.7) +
+        scale_y_continuous(name = "Survival Month")+
+        #scale_x_discrete(name = "Race")+
+        scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+        labs(title="Average Survival Months to Different Races", fill="Race")+
+  theme(legend.position = 'none',plot.title = element_text(size=10,hjust = 0.5))
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+
+Apart from survival months, we also took the death rate directly attributable to this cancer into consideration. The Death_Rate in the next histogram stands for the proportion of death that is directly caused by this cancer over all patients within a race. 
+```{r}
+death<- sqldf("select Race, Cause_Death from seer")
+for (i in 1:7286){
+  if (str_detect(death$Cause_Death[i], "attributable")){
+    death$dead[i] = 1
+  }else{
+    death$dead[i] = 0
+  }
+}
+
+death2<- sqldf("select Race, avg(dead) as Death_Rate from death group by Race")
+race_death<- ggplot(data=death2)+
+  geom_bar(aes(x=Race,y=Death_Rate,fill=Race),stat="identity")+
+<<<<<<< HEAD
+<<<<<<< HEAD
+  labs(title="Death Rate Attributable by This Cancer", x="Race",y="Death_Rate",fill="Race")+
+  theme(legend.position = 'none',plot.title = element_text(size=10,hjust = 0.5),axis.text.x = element_text(size=8))
+race_death
+```
+
+```{r}
+#grid.arrange(race_survival,race_death,ncol = 2)
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+  scale_x_discrete(guide = guide_axis(n.dodge=2)) +
+  labs(title="Death Rate Attributable by This Cancer", x="Race",y="Death_Rate",fill="Race")+
+  theme(legend.position = 'none',plot.title = element_text(size=10,hjust = 0.5))
+```
+
+```{r}
+grid.arrange(race_survival,race_death,ncol = 2)
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+
+
+The histogram above shows a similar pattern to pattern 2 with only Unknown race as an exception. 
+
+### Insights From EDA
+
+All the analysis that has been shown above indicates some common characteristics, that nearly all the emotionally positive features like education level, household income and survival months shows pattern 1 with Asian or Pacific Islander getting relatively higher values and some other races getting relatively lower value. On the contrary, all the emotionally negative features like unemployment rate, poverty rate and death rate shows pattern 2. 
+
+These findings give us an indication that it is significant and valuable for us to conduct a deeper research to the assumption that there could be bias or discrimination during clinical treatment for head and neck cancer.
+
+
+# Modelling
+
+### Feature Extraction and Model Selection
+
+We expected the predictors represent the patients’ socioeconomic status, so we chose Registry, County, Sex,Year, Age, Insurance,Nine_Grade, High_School,A tleast_Bachlor, Person_Below_Poverty, Unemployed, Median_Household_Income, Language_Isolation. 
+
+However, we worried that these variables were somehow relatively correlated. For example, the variables which represented the education level and income level were the same in one County. To detect and decrease the multicollinearity, we did Correlation Analysis to categorical and continuous variables separately.
+
+For the categorical variables, we processed Chi Squared Test and found that the p values were all <0.05. It seemed like each two of Race, Sex and Insurance were strongly correlated. So, we only chose Race as the predictor of our model.
+
+For the numeric variables, we tried several methods like PCA, Stepwise Regression, Ridge Regression, Lasso Regression. As a result, we deleted variable High_School and gained the value Kappa 75, which indicated the low multicollinearity.
+
+In summary, we choose Race, Age, Nine_Grade ,Atleast_Bachlor, Person_Below_Poverty, Unemployed, Median_Household_Income, Language_Isolation as the predictors.
+
+Considering our dataset has both numeric and nominal values as predictors and binary response, so a dichotomic classifier is a good fit for our analysis. Among all the common classifiers, we choose logistic regression for better interpretation of the coefficients. While other methods might not perfectly cater to our needs. For instance, linear discriminant analysis requires that the observations are drawn from a Gaussian distribution with a common covariance matrix in each class, which is difficult to affirm with nominal variables as predictors. Since our goal is to analysis if there is any discrimination or bias during treamtment process, so it is crucial for us to have a quantitive understanding of the relationship between predictors and the response. Overall, logistic regression is an ideal model for our research. 
+
+### Topic 1: difference between the recommended and standard therapy 
+
+The first step, we wondered whether the doctors had bias towards patients in different socioeconomic status. In particular, our goal was to find which kind of patients are likely given different therapy from standard by doctors. 
+
+According to our results from the logistic regression, the coefficients of Age and Langauge_Isolation are statistically significant. On the one hand, doctors are more likely to make different surgery decisions from the NCCN guidelines standard on older patients. On the other hand, the lower percent of households in language isolation is, the higher possibility for doctors to make biased surgery decisions. (The Census Bureau considers a household to be linguistically isolated when all members above the age of 14 speak a non-English language and speaks English less than “very well”.)
+
+```{r}
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+fit1=glm(Diff_Reco_Sur ~ Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer,family=binomial(link="logit"))
+#summary(fit1)
+
+fit11=glm(Diff_Reco_Rad ~ Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer,family=binomial(link="logit"))
+#summary(fit11)
+
+fit111=glm(Diff_Reco_Chem ~ Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer,family=binomial(link="logit"))
+#summary(fit111)
+```
+
+```{r}
+Sur <- data.frame(summary(fit1)$coefficients)[,c(1,4)]
+Rad <- data.frame(summary(fit11)$coefficients)[,c(1,4)]
+Chem <- data.frame(summary(fit111)$coefficients)[,c(1,4)]
+output <- cbind(Sur,Rad,Chem)
+colnames(output) <- c('Sur','p_value','Rad','p_value','Chem','p_value')
+```
+
+```{r}
+output %>%
+  kbl() %>%
+  kable_classic(full_width = F, html_font = "Cambria") %>%
+  footnote(general = "The table above is the summary output of three different Logistic Regression models.",
+           general_title = "Table 1: ")
+```
+
+<<<<<<< HEAD
+<<<<<<< HEAD
+Below is the validation for logistic regression. According to AUC and  ROC, the model is not a perfect classifier, but since we are aiming at inference instead of prediction. We focus more on if the coefficients are positive or negative and if it is significant or not. So the result is acceptable for our analysis. The residual plots show some kind of patterns, which will be discussed later in Discussion.
+
+```{r fig.width= 4,fig.height= 2}
+par(mfrow=c(2,3))
+prob1<-fitted(fit1)
+resid1<-residuals(fit1)
+binnedplot(prob1,resid1)
+
+prob11<-fitted(fit11)
+resid11<-residuals(fit11)
+binnedplot(prob11,resid11)
+
+prob111<-fitted(fit111)
+resid111<-residuals(fit111)
+binnedplot(prob111,resid111)
+
+library(pROC)
+=======
+Similarly, in the Diff_Reco_Rad and Diff_Reco_Chem model, the coefficient of Age is statistically significant. Doctors are more likely to make different radiation and chemotherapy decisions from the NCCN guidelines standard on older patients.
+
+```{r}
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+Similarly, in the Diff_Reco_Rad and Diff_Reco_Chem model, the coefficient of Age is statistically significant. Doctors are more likely to make different radiation and chemotherapy decisions from the NCCN guidelines standard on older patients.
+
+```{r}
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+pre1 <- predict(fit1,type='response')
+plot.roc(seer$Diff_Reco_Sur, pre1,main="Surgery ROC Curve", percent=TRUE,print.auc=TRUE,ci=TRUE,of="thresholds",thresholds="best",print.thres="best")
+pre11 <- predict(fit11,type='response')
+plot.roc(seer$Diff_Reco_Rad, pre1,main="Radiation ROC Curve", percent=TRUE,print.auc=TRUE,ci=TRUE,of="thresholds",thresholds="best",print.thres="best")
+pre111 <- predict(fit111,type='response')
+plot.roc(seer$Diff_Reco_Chem, pre1,main="Chem ROC Curve", percent=TRUE,print.auc=TRUE,ci=TRUE,of="thresholds",thresholds="best",print.thres="best")
+<<<<<<< HEAD
+<<<<<<< HEAD
+
+#rocplot1 <- roc(seer$Diff_Reco_Sur,pre1)
+#ci.auc(rocplot1)
+#rocplot11 <- roc(seer$Diff_Reco_Rad,pre11)
+#ci.auc(rocplot11)
+#rocplot111 <- roc(seer$Diff_Reco_Chem,pre111)
+#ci.auc(rocplot111)
+```
+
+
+
+Similarly, in the Diff_Reco_Rad and Diff_Reco_Chem model, the coefficient of Age is statistically significant. Doctors are more likely to make different radiation and chemotherapy decisions from the NCCN guidelines standard on older patients.
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+rocplot1 <- roc(seer$Diff_Reco_Sur,pre1)
+ci.auc(rocplot1)
+rocplot11 <- roc(seer$Diff_Reco_Rad,pre11)
+ci.auc(rocplot1)
+rocplot111 <- roc(seer$Diff_Reco_Chem,pre111)
+ci.auc(rocplot1)
+```
+This is the validation for logistic regression. According to AUC and  ROC, the model is not a perfect classifier, but since we are aiming at inference instead of prediction. We focus more on if the coefficients are positive or negative and if it is significant or not. So the result is acceptable for our analysis.
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+
+### Topic 2: difference between the recommended and patient’s attitude
+
+Why were there differences between the actual treatment and guideline standard? It not only related to the doctors’ bias, but also to the patients’ attitude and behaviour. After researching doctors’ therapy decisions, we would like to research the patients’ attitude towards the doctors’ decisions. Specifically, our goal was to define which kind of patients tend to refuse doctors’ recommendation of surgery and radiation.
+
+We filtered the subset of SEER data, in which surgery_recommend and radiation_recommend were TRUE. In other words, we chose the patients who were recommended to take surgery and radiation.
+
+Below are our regression results. The coefficient of Age is statistically significant. Patients are more likely to refuse the doctors’ recommendations of surgery and radiation .
+
+```{r}
+fit2 = glm(surgery_refused ~ Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer %>% filter(surgery_recommended ==1),family=binomial(link="logit"))
+#summary(fit2)
+
+fit22 = glm(radiation_refused ~ Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer %>% filter(radiation_recommended ==1),family=binomial(link="logit"))
+#summary(fit22)
+```
+
+```{r}
+Surgery_refused <- data.frame(summary(fit2)$coefficients)[,c(1,4)]
+Radiation_refused <- data.frame(summary(fit22)$coefficients)[,c(1,4)]
+output2 <- cbind(Surgery_refused,Radiation_refused)
+colnames(output2) <- c('Surgery_refused','p_value','Radiation_refused','p_value')
+```
+
+```{r}
+output2 %>%
+  kbl() %>%
+  kable_classic(full_width = F, html_font = "Cambria") %>%
+<<<<<<< HEAD
+<<<<<<< HEAD
+  footnote(general = "The table above is the summary output of different Logistic Regression models.",
+           general_title = "Table 2: ")
+```
+
+Below is the validation for logistic regression. It’s similar to the validation in topic 1. We will discuss more about  this problem in the next  part of our report.
+
+```{r }
+par(mfrow=c(2,2))
+
+prob2<-fitted(fit2)
+resid2<-residuals(fit2)
+binnedplot(prob2,resid2)
+
+prob22<-fitted(fit22)
+resid22<-residuals(fit22)
+binnedplot(prob22,resid22)
+
+library(pROC)
+pre2 <- predict(fit2,type='response')
+plot.roc((seer %>% filter(surgery_recommended ==1))$surgery_refused, pre2,main="Surgery ROC Curve", percent=TRUE,print.auc=TRUE,ci=TRUE,of="thresholds",thresholds="best",print.thres="best")
+
+pre22 <- predict(fit22,type='response')
+plot.roc((seer %>% filter(radiation_recommended ==1))$radiation_refused, pre22,main="Radiation ROC Curve", percent=TRUE,print.auc=TRUE,ci=TRUE,of="thresholds",thresholds="best",print.thres="best")
+
+
+#rocplot2 <- roc(seer$surgery_refused,pre2)
+#ci.auc(rocplot2)
+#rocplot22 <- roc(seer$radiation_refused,pre22)
+#ci.auc(rocplot22)
+
+```
+=======
+  footnote(general = "The table above is the summary output of different Logistic Regression models.",general_title = "Table 2: ")
+```
+
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+  footnote(general = "The table above is the summary output of different Logistic Regression models.",general_title = "Table 2: ")
+```
+
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+
+### Topic 3: Vital Status
+
+The next step is to analyse if deviation from standard therapy will cause worse outcomes. In the dataset, there is a numeric variable called “Survival_Months”, indicating how long the patient lived after diagnosis, and another binary variable called “Vital_Status”, indicating if the patient died from cancer. In this scenario, we converged on causal mediation analysis. 
+
+Causal mediation analysis is able to explain the underlying mechanism between the treatment and the outcome via a mediator. In our case, difference of surgery/ difference of radiation/ difference of chemotherapy should be the treatment, and we are interested in how deviation from standard therapy is related to vital status, through the mediator set as survival months.
+
+We ran causal mediation analysis with “Diff_Reco_Sur”, “Diff_Reco_Rad”, “Diff_Reco_Chem” as treatment separately.  Direct effect is measured by ADE at 5% significance level, and the causal mediation effect (indirect effect) is measured by ACME at 5% significance level. Here is a table showing the results.
+
+```{r}
+col_one <- c('Diff_Reco_Sur','Diff_Reco_Rad','Diff_Reco_Chem')
+col_two <- c('significant','significant','significant')
+col_three <- c('significant','non-significant','significant')
+col_four <- c('significant','significant','significant')
+output3 <- cbind(col_one,col_two,col_three,col_four)
+colnames(output3) <- c('Treatment','ACME(Indirect Effect)','ADE(Direct Effect)','Total Effect')
+```
+
+```{r}
+output3 %>%
+  kbl() %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+#%>%
+ # footnote(general = "The table above is the summary output of different Logistic Regression models.",
+  #         general_title = "Table 2: ")
+```
+
+
+From the results, we can tell that deviation from standard therapy does have some causal effects on the patient’s survival and vital status. Nevertheless, since Age is strongly related to the three treatment variables we used, the real cause might be the Age. For example, when treating an older person, the doctor might be less likely to follow the standard therapy. At the same time, older people in general have a higher death rate, which affects the survival months and vital status.
+
+To validate our inference, we applied a random forest model on the data, to identify the importance of variables to survival months and vital status. 
+
+<<<<<<< HEAD
+<<<<<<< HEAD
+```{r fig.width=6,fig.height=3}
+par(mfrow =c(1,2))
+#rf=randomForest(Survival_Months ~ Diff_Reco_Rad+Diff_Reco_Sur+Diff_Reco_Chem+radiation_refused+surgery_refused+Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer)
+#summary(rf)
+varImpPlot(x=rf,sort=TRUE,n.var=nrow(rf$importance),main="Importance")
+
+#rf2=randomForest(Vital_Status ~ Diff_Reco_Rad+Diff_Reco_Sur+Diff_Reco_Chem+radiation_refused+surgery_refused+Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer)
+#summary(rf2)
+varImpPlot(x=rf2,sort=TRUE,n.var=nrow(rf$importance),main="Importance")
+
+
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```{r}
+rf=randomForest(Survival_Months ~ Diff_Reco_Rad+Diff_Reco_Sur+Diff_Reco_Chem+radiation_refused+surgery_refused+Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer)
+#summary(rf)
+varImpPlot(x=rf,sort=TRUE,n.var=nrow(rf$importance),main="Importance")
+```
+
+```{r}
+rf2=randomForest(Vital_Status ~ Diff_Reco_Rad+Diff_Reco_Sur+Diff_Reco_Chem+radiation_refused+surgery_refused+Race+Age+Nine_Grade+Atleast_Bachlor+Person_Below_Poverty+Unemployed+Median_Household_Income+Language_Isolation,data = seer)
+#summary(rf2)
+varImpPlot(x=rf2,sort=TRUE,n.var=nrow(rf$importance),main="Importance")
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+```
+
+
+From the variable importance plots, we can tell that Age is a dominated important variable, which confirms our hypothesis. 
+
+
+# Conclusion
+
+In conclusion, there is no obvious discremination on races, genders, ages or income levels during the treatment of head and neck cancers. 
+Specifically, the bias of therapy decisions from standard is more likely related to the patients’ age, instead of socioeconomic status like income and education level. Older people are more likely to be given different therapy from standard, and eventually have worse outcomes. 
+
+
+# Discussion 
+
+In the topic 1 part, we found that language isolation and the different surgery recommendation from NCCN guidelines standard were negatively related. But we cannot say the higher language isolation directly represents the lower socioeconomic status, thus we cannot say that the lower socioeconomic status, the lower the bias of therapy decisions.
+
+<<<<<<< HEAD
+<<<<<<< HEAD
+There are also some limitations in our analysis. First, the sequence of therapy is not considered in our analysis. In the seer dataset, the sequence of radiation and surgery is way more complicated than that in NCCN guidelines. In NCCN guidelines, there are only two sequences: radiation after surgery and surgery after radiation. However,  in the SEER dataset, radiation might be used before and after surgery, or even during surgery. Therefore, it requires more medical knowledge to determine if the actual therapy given is different from the standard guidelines. In addition, since we are not familiar with the TNM stage, there might be some mistakes when identifying the T stage and N stage of the patient. Furthermore, in the modeling part, although we have reduced multicollinearity to an acceptable level, there are still some correlations between variables. It might have affected the model accuracy to some extent. 
+
+Moreover, there might have been some patterns that the current model didn’t explain. In figure 8 there are binned residuals plots for the three logistic regression models. Overall the points are within the boundaries. Nevertheless, the first plot shows that there might be some higher-order relationships between the response variables and the predictors. The third plot shows the average residuals tend to be negative. Therefore, it requires further research on the dataset and the modeling to figure the relationship between responses and predictors. In figure 9, the residual plot shows a clear pattern, indicating that the link function might be inappropriate. Therefore, the validation of models in topic 2 is questionable.
+
+Apart from residual plot, we also plotted ROC curves and calculated the AUC. According to AUC and  ROC, the model is not a perfect classifier with 95% confidence interval lies between 0.6 and 0.7. But since we are aiming at inference instead of prediction. We focus more on if the coefficients are positive or negative and if it is significant or not. So the result is acceptable for our analysis.
+=======
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+
+# Reference
+
+http://www.sthda.com/english/articles/39-regression-model-diagnostics/160-multicollinearity-essentials-and-vif-in-r/
+
+Multicollinearity Essentials and VIF in R - Articles
+Multicollinearity in R
+Correlations Analysis 
+<<<<<<< HEAD
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+=======
+>>>>>>> c040499e1acf8101b144a77314d2f371d9f1117d
+
+

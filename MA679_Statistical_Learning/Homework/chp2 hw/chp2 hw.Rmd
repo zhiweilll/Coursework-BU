@@ -1,0 +1,99 @@
+---
+title: "Chp2 Homework"
+author: "Wendy Liang"
+date: "2/10/2021"
+output: 
+    pdf_document: 
+     latex_engine: xelatex
+---
+
+```{r setup, include=FALSE,message=FALSE,error=FALSE,fig.align='center'}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load("ggplot2")
+```
+
+## Process To Get Critical Value 
+
+Firstly, let's define the Null Hypothesis and Alternative Hypothesis of this example.
+$$H_0: p = 0.6 \space\space;\space\space H_1:p > 0.6 $$ where p is the probability that the new aspirin is effective. And we assume that the total people n = 100 and critical value is m.
+
+Secondly, let's calculate the two types of errors.
+
+The **Type I error** is $$\alpha(p)=\sum_{60\le{k}\le{100}}b(100,0.6,k)$$ which means when p = 0.6, we think p > 0.6. In other words, when the new drug isn't more effective, we regard it as more effective.
+
+```{r,warning=FALSE}
+m1=rep(0,40)
+alpha=rep(0,40)
+
+# calculate reject area: P(m1 < X < 100) when H0 is true
+for(i in 0:40){
+  m1[i]=i+60
+  alpha[i]=pbinom(q=100,size=100,prob=0.6)-pbinom(q=m1[i]-1,size=100,prob=0.6)
+}
+error1=data.frame(cbind(m1,alpha))
+```
+
+The **Type II error** is $$\beta(p)=1-\alpha(p)=\sum_{k\le{80}}b(100,0.8,k)$$, which means when p > 0.6, we think p = 0.6. In other words, when the new drug is more effective, we don't regard it as more effective.
+
+```{r}
+m2=rep(0,20)
+beta=rep(0,20)
+
+# calculate accept area: P(X < m2) when H0 is false
+for(i in 0:20){
+  m2[i]=80-i
+  beta[i]=pbinom(q=m2[i]-1,size=100,prob=0.8)
+}
+error2=data.frame(cbind(m2,beta))
+```
+
+What we hope to do then, for a given test population n, is to choose a value of m, if possible, which makes both these probabilities small.So, assume the two types of errors are both less than 0.05.
+
+```{r}
+min(error1[which(error1[,2]<0.05),1])
+max(error2[which(error2[,2]<0.05),1])
+```
+Above are the process to get the critical value range [69, 73]. 
+
+
+## Process To Get Figure 3.7
+
+The left line represents the case where m = 69 and the right line represents the case m = 73. As m increases, the graph of $\alpha(p)$ moves to the right. 
+
+```{r,warning=FALSE}
+# p(the probability of new drug effectiveness) ranges from [0.4,1]
+p=seq(from=0.4,to=1,length=100)
+
+# Type I Error for m1 m2
+alpha69=rep(0,100)
+for(i in 1:100){
+  alpha69[i]=pbinom(q=100,size=100,prob=p[i])-pbinom(q=68,size=100,prob=p[i])
+}
+
+alpha73=rep(0,100)
+for(i in 1:100){
+  alpha73[i]=pbinom(q=100,size=100,prob=p[i])-pbinom(q=72,size=100,prob=p[i])
+}
+
+
+df=data.frame(cbind(p,alpha69,alpha73))
+
+#plot
+ggplot(data=df,mapping=aes(x=p))+
+  geom_line(mapping=aes(y=alpha69))+
+  geom_line(mapping=aes(y=alpha73))+
+  labs(x="p",y="a(p)")+
+  ggtitle("Figure 3.7: The power curve")+
+  geom_segment(mapping=aes(x=0.6,xend=0.8,y=0.05,yend=0.05))+
+  geom_segment(mapping=aes(x=0.6,xend=0.8,y=0.95,yend=0.95))+
+  geom_segment(mapping=aes(x=0.6,xend=0.6,y=0.05,yend=0.95))+
+  geom_segment(mapping=aes(x=0.8,xend=0.8,y=0.05,yend=0.95))+
+   theme(panel.grid=element_blank(),
+        panel.background = element_blank(),
+        panel.border=element_blank(),
+        axis.line=element_line(colour="black"),
+        plot.title = element_text(hjust=0.5,size=15))
+```
+We include in our graph a box (in dotted lines) from 0.6 to 0.8, with bottom and top at
+heights 0.05 and 0.95. Then a value for m satisfies our requirements if and only if the
+graph of $\alpha$ enters the box from the bottom, and leaves from the top (left bottom is the type 1 and right top is the type 2 criterion).

@@ -1,0 +1,336 @@
+---
+title: "MA679 Midterm Exam"
+author: "Zhiwei Liang"
+date: "3/18/2021"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE,error = FALSE,warning = FALSE)
+library(data.table)
+library(dplyr)
+```
+
+# Context
+
+A company wants to hire data scientists from pool of people enrolled in the courses conduct by the company. The company wants to know which of these candidates are looking to change their job.  Information related to demographics, education, experience are in hands from candidates signup and enrollment.  In this exam, your goal is to predict if the candidate is looking for a new job or will work for the current company. 
+
+- uid : Unique ID for candidate  
+- city: City code  
+- city_dev_index : Development index of the city (scaled)   
+- gender: Gender of candidate  
+- relevant_experience: Relevant experience of candidate  
+- enrolled_university: Type of University course enrolled if any  
+- education_level: Education level of candidate  
+- major_discipline :Education major discipline of candidate  
+- experience_years: Candidate total experience in years  
+- company_size: No of employees in current employer's company  
+- company_type : Type of current employer  
+- lastnewjob: Difference in years between previous job and current job  
+- training_hours: training hours completed  
+- change_job: 0 – Not looking for job change, 1 – Looking for a job change  
+
+```{r, echo=FALSE}
+train = fread("train_sample.csv")
+test = fread("test_sample.csv")
+```
+
+# My Work
+
+## Data Processing
+
+- Observe the train data
+```{r}
+# check the type of each variable
+summary(train)
+
+# cancel some useful variable
+train = train %>% select(-city_id,-uid,-V1)
+test= test %>% select(-city_id)
+```
+
+
+- Convert character variable to the factor
+
+To better achieve the results, I bin below features into different intervals. For `experience_years`, I bin into four categories based on the quantiles: Y1 to Y4.
+
+```{r}
+##################################### convert train data ##################################
+train$gender = factor(train$gender)
+train$relevant_experience = factor(train$relevant_experience)
+train$enrolled_university = factor(train$enrolled_university)
+train$education_level = factor(train$education_level)
+train$major_discipline = factor(train$major_discipline)
+train$company_type = factor(train$company_type)
+train$last_new_job = factor(train$last_new_job)
+train$change_job = factor(train$change_job)
+train$company_size = factor(train$company_size)
+train$city_dev_index = as.numeric(train$city_dev_index)
+
+# year
+#unique(train$experience_years) 
+train$experience_level = train$experience_years
+train$experience_years[train$experience_years == ">20"] = "22"
+train$experience_years[train$experience_years == "<1"] = "0"
+train$experience_years = as.numeric(train$experience_years)
+#hist(train$experience_years)
+#summary(train$experience_years)
+train$experience_level[train$experience_years>=0 & train$experience_years <4] = "Y1"
+train$experience_level[train$experience_years>=4 & train$experience_years <10] = "Y2"
+train$experience_level[train$experience_years>=10 & train$experience_years <16] = "Y3"
+train$experience_level[train$experience_years>=16] = "Y4"
+train$experience_level = factor(train$experience_level)
+
+
+
+################################### convert test data #################################
+test$gender = factor(test$gender)
+test$relevant_experience = factor(test$relevant_experience)
+test$enrolled_university = factor(test$enrolled_university)
+test$education_level = factor(test$education_level)
+test$major_discipline = factor(test$major_discipline)
+test$company_type = factor(test$company_type)
+test$last_new_job = factor(test$last_new_job)
+test$company_size = factor(test$company_size)
+test$city_dev_index = as.numeric(test$city_dev_index)
+
+# year
+#unique(test$experience_years) #add a col experience_level
+test$experience_level = test$experience_years
+test$experience_years[test$experience_years == ">20"] = "22"
+test$experience_years[test$experience_years == "<1"] = "0"
+test$experience_years = as.numeric(test$experience_years)
+#hist(train$experience_years)
+#summary(train$experience_years)
+test$experience_level[test$experience_years>=0 & test$experience_years <4] = "Y1"
+test$experience_level[test$experience_years>=4 & test$experience_years <10] = "Y2"
+test$experience_level[test$experience_years>=10 & test$experience_years <16] = "Y3"
+test$experience_level[test$experience_years>=16] = "Y4"
+test$experience_level = factor(test$experience_level)
+
+```
+
+
+
+- Deal with the missing value
+
+I use `skimr` and `forcats` packages to detect the missing value and handle them by imputation.
+
+```{r}
+library(skimr)
+library(ggplot2)
+library(forcats)
+
+################################################ train data imputation ##########################################
+library(missForest)
+set.seed(12)
+
+train_impute <- missForest(xmis = train, maxiter = 2, ntree = 20)
+train_impute  <- train_impute$ximp
+
+
+
+############################################# test data imputation ################################################ 
+test_impute <- missForest(xmis = test, maxiter = 2, ntree = 20)
+test_impute  <- test_impute$ximp
+```
+
+- Split the train data into two part
+
+In order to validate the model later, I put 80% train dataset into `train_set` and 20% into`test_set`. The `train_set` is used to train the model and `test_set` is used to test the model.
+
+```{r}
+#write.csv(train_impute,"train_impute.csv")
+#write.csv(test_impute,"test_impute.csv")
+#train_impute = read.csv("train_impute.csv")
+#test_impute = read.csv("test_impute.csv")
+
+# split the train_imput into the train_set and test_set 
+library(caTools)
+set.seed(12)
+split = sample.split(train_impute$change_job, SplitRatio = 0.8)
+
+train_set = subset(train_impute, split == TRUE) # for modeling
+test_set = subset(train_impute, split == FALSE) # for validation
+
+#nrow(train_set) 
+#nrow(test_set)
+```
+
+
+
+## Model Selection
+
+### Random Forest
+
+- Choose the best `mtry`
+
+```{r}
+library(randomForest)
+set.seed(12)
+
+train_mytry <- tuneRF(x = train_set[,-12], y = train_set$change_job,
+       stepFactor = 0.5,
+       plot = TRUE,
+       ntreeTry = 200,
+       trace = TRUE,
+       improve = 0.05)
+# mtry=3
+```
+
+- Build random forest model, using the `train_set`
+
+```{r}
+set.seed(12)
+rf = randomForest::randomForest(
+  change_job ~ .,
+  data = train_set,
+  ntree = 200,
+  mtry = 3,
+  importance = TRUE,
+  type = 'class'
+  )
+rf
+plot(rf)
+
+# find the most important variables
+varImpPlot(rf,
+           sort = T,
+           n.var = 5,
+           main = "Top 5 Important Variable")
+```
+We can see that the level of city development and people's training hours are the most important influence variables to the possibility of changing jobs.
+
+
+
+### Logistic Regression
+
+```{r}
+lr=glm(formula = change_job ~ ., data = train_set,family=binomial(link="logit"))
+
+summary(lr)
+```
+
+
+
+
+## Model Validation
+  
+- **Confusion Matrix function** evaluates data accuracy,sensitivity, specificity and F-Score. The parameters represents the confusion matrix of a prediction.
+
+```{r}
+Confusion_Matrix = function(confusion) {
+  TP = confusion[4]
+  TN = confusion[1]
+  FP = confusion[2]
+  FN = confusion[3]
+  
+  accuracy = round((TP+TN)/(TP+TN+FP+FN),4)
+  sensitivity = round(TP/(TP+FN),4)
+  specificity = round(TN/(TN+FP),4)
+  F1Score = round((2*TP)/(2*TP+FP+FN),4)
+  PPV = TP/(TP+FP)
+  NPV = TN/(TN+FN)
+  
+  print(confusion)
+  print(c("accuracy:", round(accuracy,4)))
+  print(c("sensitivity:", round(sensitivity,4)))
+  print(c("specificity:", round(specificity,4)))
+  print(c("F1Score:", round(F1Score,4)))
+  print(c("PPV:", round(PPV,4)))
+  print(c("NPV:", round(NPV,4)))
+  return(accuracy)
+}
+```
+
+- **Random Forest Validation**
+```{r}
+# random forest prediction, predict the train_set
+pred_train_rf = predict(rf,train_set)
+pred_train_t = table(actual = train_set$change_job,predicted = pred_train_rf)
+Confusion_Matrix(pred_train_t)
+
+
+# random forest validation, predict the test_set
+pred_test_rf = predict(rf,test_set)
+pred_test_t=table(actual = test_set$change_job,predicted = pred_test_rf)
+Confusion_Matrix(pred_test_t)
+```
+
+
+- **Logistic Regression Validation**
+```{r}
+# logistic regression, predict the train_set
+p_train_lr = predict(lr,test_set,type = "response")
+p_train_lr [p_train_lr >=0.5]=1
+p_train_lr [p_train_lr <0.5]=0
+t_train=table(actual = test_set$change_job,predicted =p_train_lr )
+Confusion_Matrix(t_train)
+
+# logistic regression, predict the test_set
+p_test_lr = predict(lr,test_set,type = "response")
+p_test_lr [p_test_lr >=0.5]=1
+p_test_lr [p_test_lr <0.5]=0
+t_test=table(actual = test_set$change_job,predicted =p_test_lr )
+Confusion_Matrix(t_test)
+```
+
+Through validation, we can clearly see the **accuracy** of Random Forest Model is far higher than Logistic Regression Model. The **sensitivity** and **specificity** of Random Forest Model is also a little bit higher than Logistic Regression Model. 
+
+So, I decide to use Random Forest Model.
+
+
+
+### Model Evaluation
+
+- Draw **ROC** and calculate the **AUC** of Random Forest Model
+
+```{r}
+library(ROCR)
+# random forest validation, predict the test_set
+pred_test_rf_prob=predict(rf,test_set,type = "prob")
+pred_test_rf_y=prediction(pred_test_rf_prob[,2],test_set$change_job)
+perf_test<-performance(pred_test_rf_y,"tpr","fpr")
+plot(perf_test,colorize=TRUE,main = "Random Forest ROC")
+auc_test_rf <- performance(pred_test_rf_y,'auc')
+auc_test_rf =unlist(slot(auc_test_rf,"y.values"))
+auc_test_rf
+```
+
+It seems like the model is significant since the AUC of test_set is **`r auc_test_rf `**.
+
+
+- Predict the test_sample
+```{r}
+pred_rf = predict(rf,test_impute)
+submit=cbind(test_impute,pred_rf)
+write.csv(submit,"my_submit.csv")
+```
+
+
+## Discussion
+
+We can get a lot of informations from these two models, such as the following: 
+
+- The higher level of city development, people are less likely to change jobs.
+
+- Those with less relevant job experience are more likely to change jobs.
+
+- People in very small size companies are more likely to change jobs.
+
+
+In summary, the accuracy and AUC scores of the Random Forest Model are both good. So, the prediction of the test sample is significant for us.
+
+
+## Limitations
+
+- In both train and test sample, `change_job` which equal to 0 are much more than those equal to 1. I think this imbalance  will influence the accuracy of the prediction model. SMOTE algrithom can solve the imbalance problem but I don't know how to use it in R.
+
+- The sample size is not big enough. I worry the model will be overfitting.
+
+
+## Reference
+
+[《An Introduction to Statistical Learning with Applications in R》](https://www.statlearning.com/)

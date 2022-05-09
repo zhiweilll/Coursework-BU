@@ -1,0 +1,27 @@
+---
+title: "Data Processing"
+author: "Zhiwei Liang, Yijia Wei, Yuankai Zhang"
+date: "12/2/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(stringr)
+library(magrittr)
+```
+
+# production countries
+```{r}
+clean = readxl::read_xlsx("clean.xlsx")
+
+clean %<>% 
+  mutate(
+    North_America = if_else(str_detect(clean$production_countries,"US|CA"),1,0),#替换成完整国家list
+    Asian = if_else(str_detect(clean$production_countries,"CN|IN|KN|JP"),1,0),
+    Europe = if_else(str_detect(clean$production_countries,"EN|FR|IT"),1,0),
+    ) %<>%
+  mutate(Other = if_else(North_America ==0 &Asian ==0&Europe ==0,1,0))
+
+```
