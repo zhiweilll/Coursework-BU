@@ -1,3 +1,3 @@
-# BU MSSP
+# Intro
 
-Projects and homeworks I've done at BU
+Projects and homeworks during graduate study at BU
